@@ -1,0 +1,17 @@
+base_path: /dataset/evqa
+image_path: datasets/real_images/Downside_Abbey.jpg
+kb_json_name: encyclopedic_kb_wiki_aug.jsonl
+text_query: Who was elected the first abbot of this abbey in six years?
+k_value: 10
+m_value: 10
+alpha: 0.9
+use_tfidf_filter: false
+tfidf_ratio: 0.5
+image_device: 1
+dataset_csv: /dataset/evqa/test.csv
+id2name_json: /dataset/inaturalist/train_id2name.json
+dataset_image_root: /dataset/inaturalist
+googlelandmark_root: /dataset/landmarks
+
+dataset_start: 0
+dataset_end: 2000

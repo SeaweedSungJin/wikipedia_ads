@@ -1,0 +1,38 @@
+1. {
+    Prunus_laurocerasus, 
+    TEXT_QUERY = "How big can this plant become?", 
+    A="5 to 15 metres|5 to 15 metres |5 to 15 metres", 1
+}
+2. {
+    Strongylocentrotus_droebachiensis, 
+    TEXT_QUERY = "What is the common name for this animal?.", 
+    A="green sea urchin|green sea urchin|green sea urchin", 0
+}
+3. {
+    Downside_Abbey, 
+    TEXT_QUERY = "In what county is downside abbey located?.", A="Somerset", 0
+    TEXT_QUERY = "How many monks lived at downside abbey in 2020?.", A="fifteen", 0
+    TEXT_QUERY = "downside abbey is a benedictine this?.", A="monastery", 0
+    TEXT_QUERY = "What type of monastery is this monastery?.", A="Benedictine", 0
+    TEXT_QUERY = "In what country is this abbey located?.", A="England", 0
+    TEXT_QUERY = "What was the subject of this abbey?.", A="Foundation and development", 2
+    TEXT_QUERY = "Who was elected the first abbot of this abbey in six years?.", A="Dom Nicholas Wetz", 3
+    TEXT_QUERY = "Who built the choir at this abbey?.", A="Thomas Garner", 8
+}
+4. {
+    Dendraster_excentricus,
+    TEXT_QUERY = "What is the common name for this animal?”
+    A= "sea-cake, biscuit-urchin, western sand dollar, or Pacific sand dollar
+    |sea-cake|sea-cake, biscuit-urchin, western sand dollar, or Pacific sand dollar", 0
+
+}
+5. {
+    Crotalus_pyrrhus,
+    TEXT_QUERY = "In this reptile venomous?", A="Yes", 0
+    TEXT_QUERY = "What does this reptile eat?", A="small mammals, birds and lizards", 6
+    TEXT_QUERY = "In this part of the world does this animal live?", A="southwestern United States and northwestern Mexico", 0
+    TEXT_QUERY = "How large does this animal become typically?", A="3 feet-4 feet", 1
+    TEXT_QUERY = "What is the habitat of this reptile?", A="hillsides, canyons, talus slopes and rock ledges", 4
+    TEXT_QUERY = "How many egg does this reptile typically lay?", A="12 live young", 7
+
+}
