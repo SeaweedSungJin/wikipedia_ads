@@ -10,6 +10,8 @@ _IMAGE_MODEL = None
 _IMAGE_PROCESSOR = None
 _TEXT_MODEL = None
 _TOKENIZER = None
+_RERANKER_MODEL = None
+
 
 import torch
 from transformers import (
@@ -18,6 +20,26 @@ from transformers import (
     CLIPImageProcessor,
     BitsAndBytesConfig,
 )
+
+def load_jina_reranker(device_map="auto"):
+    """Load the Jina cross-modal reranker model.
+
+    This model scores a (query, document) pair directly rather than
+    producing embeddings, which can yield more accurate ranking.
+    """
+    global _RERANKER_MODEL
+    if _RERANKER_MODEL is None:
+        print("텍스트 리랭커 모델 로딩중...")
+        model = AutoModel.from_pretrained(
+            "jinaai/jina-reranker-m0",
+            torch_dtype="auto",
+            trust_remote_code=True,
+            device_map=device_map,
+        )
+        model.eval()
+        _RERANKER_MODEL = model
+    return _RERANKER_MODEL
+
 
 
 def get_device() -> str:
@@ -58,20 +80,14 @@ def load_image_model(device_map="auto") -> Tuple[AutoModel, CLIPImageProcessor]:
     return _IMAGE_MODEL, _IMAGE_PROCESSOR
 
 
-def load_text_model(device_map: int | str = 1) -> Tuple[AutoModel, AutoTokenizer]:
-    """Load Vicuna language model, caching the result."""
+def load_text_model(model_name: str, device_map: int | str = "auto") -> Tuple[AutoModel, AutoTokenizer]:
+    """Load a HuggingFace text model, caching the result."""
 
     global _TEXT_MODEL, _TOKENIZER
     if _TEXT_MODEL is None or _TOKENIZER is None:
         print("텍스트 모델 로딩중...")
-        model_name = "facebook/contriever"
-
-        #quant_cfg = BitsAndBytesConfig(load_in_8bit=True)
-        #model_name = "lmsys/vicuna-7b-v1.5"
         model = AutoModel.from_pretrained(
             model_name,
-            #quantization_config=quant_cfg,
-            #low_cpu_mem_usage=True,
             trust_remote_code=True,
             device_map=device_map,
         )
@@ -79,3 +95,11 @@ def load_text_model(device_map: int | str = 1) -> Tuple[AutoModel, AutoTokenizer
         model.eval()
         _TEXT_MODEL, _TOKENIZER = model, tokenizer
     return _TEXT_MODEL, _TOKENIZER
+
+
+def load_text_encoder(model_name: str, device_map: int | str = "auto"):
+    """Return a :class:`HFTextEncoder` instance for ``model_name``."""
+    model, tokenizer = load_text_model(model_name, device_map)
+    from .encoders import HFTextEncoder
+
+    return HFTextEncoder(model, tokenizer)

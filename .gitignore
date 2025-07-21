@@ -3,3 +3,5 @@ datasets/real_images/
 datasets/test_images/
 check/
 datasets/__pycache__/
+__pycache__/
+*.pyc

@@ -18,6 +18,12 @@ class Config:
     m_value: int  # Number of text sections to return
     alpha: float  # Weight for image/text fusion
 
+    # Model options
+    text_encoder_model: str = "facebook/contriever"  # HuggingFace model name
+    segment_level: str = "section"  # "section", "paragraph" or "sentence"
+    ranker_model: str | None = None  # Optional cross-encoder for re-ranking
+    # e.g. set to 'jinaai/jina-reranker-m0'
+    
     # Optional TF-IDF pre-filtering
     use_tfidf_filter: bool = False  # Whether to filter sections with TF-IDF
     tfidf_ratio: float = 0.5  # Ratio of sections to keep when filtering

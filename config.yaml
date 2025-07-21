@@ -14,4 +14,8 @@ dataset_image_root: /dataset/inaturalist
 googlelandmark_root: /dataset/landmarks
 
 dataset_start: 0
-dataset_end: 300
+dataset_end: 10
+
+text_encoder_model: null #facebook/contriever
+segment_level: section
+ranker_model: jinaai/jina-reranker-m0  # set to 'jinaai/jina-reranker-m0' to use Jina reranker
