@@ -21,7 +21,10 @@ class Config:
     # Model options
     text_encoder_model: str = "facebook/contriever"  # HuggingFace model name
     segment_level: str = "section"  # "section", "paragraph" or "sentence"
-
+    chunk_size: int = 1024  # Maximum characters per segment when splitting
+    qformer_model: str = "Salesforce/blip2-flan-t5-xl"  # Q-former model name
+    qformer_provider: str = "hf"  # "hf" or "lavis" loader
+    qformer_weights: str | None = None  # optional fine-tuned weights path
     # Which ranking modules to enable
     rerankers: dict = field(default_factory=dict)
 

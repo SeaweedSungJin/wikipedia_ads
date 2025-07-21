@@ -73,9 +73,37 @@ class SentenceSegmenter(Segmenter):
         return segments
     
 class ParagraphSegmenter(Segmenter):
-    """Split section texts into individual paragraphs."""
+    """Split section texts into balanced-length paragraphs."""
+
+    def __init__(self, max_length: int = 1024) -> None:
+        self.max_length = max_length
+
+    def _balanced_chunks(self, sentences: List[str]) -> List[str]:
+        """Return balanced chunks from a list of sentences."""
+        import math
+
+        lengths = [len(s) + 1 for s in sentences]
+        total_len = sum(lengths)
+        num_chunks = max(1, math.ceil(total_len / self.max_length))
+        chunks: List[str] = []
+        cur, cur_len = [], 0
+        remaining_len = total_len
+        remaining_sentences = len(sentences)
+        for idx, (sent, slen) in enumerate(zip(sentences, lengths)):
+            avg_len = remaining_len / max(1, num_chunks - len(chunks))
+            if cur and ((cur_len + slen > self.max_length) or (cur_len >= avg_len and remaining_sentences)):
+                chunks.append(" ".join(cur).strip())
+                remaining_len -= cur_len
+                cur, cur_len = [], 0
+            cur.append(sent)
+            cur_len += slen
+            remaining_sentences -= 1
+        if cur:
+            chunks.append(" ".join(cur).strip())
+        return chunks
 
     def get_segments(self, doc: Dict) -> List[Dict]:
+        download_nltk_data()
         segments: List[Dict] = []
         title = doc.get("title", "N/A")
         for sec_idx, (sec_title, sec_text) in enumerate(
@@ -85,8 +113,8 @@ class ParagraphSegmenter(Segmenter):
                 continue
             if not sec_text or sec_text.isspace():
                 continue
-            # Split on blank lines to obtain paragraphs
-            paragraphs = [p.strip() for p in sec_text.split("\n\n") if p.strip()]
+            sentences = nltk.sent_tokenize(sec_text)
+            paragraphs = self._balanced_chunks(sentences)
             for para_idx, para in enumerate(paragraphs):
                 segments.append(
                     {

@@ -11,6 +11,8 @@ _IMAGE_PROCESSOR = None
 _TEXT_MODEL = None
 _TOKENIZER = None
 _RERANKER_MODEL = None
+_QFORMER_MODEL = None
+_QFORMER_PROCESSOR = None
 
 
 import torch
@@ -39,6 +41,102 @@ def load_jina_reranker(device: str | None = None):
 
     return _RERANKER_MODEL
 
+def load_qformer(
+    model_name: str = "Salesforce/blip2-flan-t5-xl",
+    device: str | None = None,
+    *,
+    provider: str = "hf",
+    weights_path: str | None = None,
+) -> Tuple[object, object]:
+    """Load a Q-former model and its processor.
+
+    Parameters
+    ----------
+    model_name: str
+        Name of the pretrained model to load.
+    device: str | None
+        Optional device for the model.
+    provider: str
+        ``"hf"`` to load via HuggingFace or ``"lavis"`` to load using the
+        LAVIS library.
+    weights_path: str | None
+        Optional path to fine-tuned weights that will be loaded after the model
+        is initialised.
+    """
+
+    global _QFORMER_MODEL, _QFORMER_PROCESSOR
+    if _QFORMER_MODEL is None or _QFORMER_PROCESSOR is None:
+        print("Q-former 모델 로딩중...")
+
+        if provider == "lavis":
+            try:
+                from lavis.models import load_model_and_preprocess
+            except ImportError as exc:  # pragma: no cover - optional dependency
+                raise ImportError(
+                    "LAVIS library is required for provider='lavis'"
+                ) from exc
+
+            try:
+                model, vis_proc, txt_proc = load_model_and_preprocess(
+                    name=model_name,
+                    model_type="pretrain",
+                    is_eval=True,
+                    device=device or "cpu",
+                )
+                processor = {
+                    "image": vis_proc.get("eval"),
+                    "text": txt_proc.get("eval"),
+                }
+            except Exception as err:
+                # Some versions of LAVIS may have incompatible weights.  Rather
+                # than failing, we log the error and continue loading via
+                # HuggingFace using a compatible checkpoint.
+                print(
+                    f"LAVIS 모델 로딩 실패: {err}. HuggingFace 로더로 대체합니다."
+                )
+                provider = "hf"
+
+        if provider == "hf":
+            from transformers import AutoProcessor
+
+            # ``blip2_feature_extractor`` is a LAVIS alias and does not exist as
+            # a HuggingFace repository.  Map it to a compatible checkpoint when
+            # falling back to HF loading.
+            hf_name = (
+                "Salesforce/blip2-flan-t5-xl" if model_name == "blip2_feature_extractor" else model_name
+            )
+
+            model = AutoModel.from_pretrained(
+                hf_name,
+                trust_remote_code=True,
+                low_cpu_mem_usage=True,
+            )
+            processor = AutoProcessor.from_pretrained(hf_name)
+
+        if weights_path:
+            state = torch.load(weights_path, map_location=device or "cpu")
+            model.load_state_dict(state, strict=False)
+
+        if device:
+            model.to(device)
+        model.eval()
+        _QFORMER_MODEL, _QFORMER_PROCESSOR = model, processor
+
+    return _QFORMER_MODEL, _QFORMER_PROCESSOR
+
+
+def compute_late_interaction_similarity(q_tokens: torch.Tensor, c_tokens: torch.Tensor) -> torch.Tensor:
+    """Return late interaction similarity score for two token sequences."""
+
+    # Normalize embeddings
+    q_tokens = torch.nn.functional.normalize(q_tokens, dim=-1)
+    c_tokens = torch.nn.functional.normalize(c_tokens, dim=-1)
+    # Compute pairwise dot products
+    sim_matrix = torch.bmm(q_tokens, c_tokens.transpose(1, 2))
+    # Take best candidate token per query token
+    max_sim = sim_matrix.max(dim=2).values
+    # Sum over query tokens
+    return max_sim.sum(dim=1)
 
 def jina_encode(model, query: str | None = None, image: str | None = None):
     """Return a multimodal embedding using the Jina reranker model."""

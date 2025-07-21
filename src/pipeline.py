@@ -70,17 +70,31 @@ def search_rag_pipeline(
 
     use_contriever = cfg.rerankers.get("contriever", False)
     use_jina = cfg.rerankers.get("jina_m0", False)
+    use_qformer = cfg.rerankers.get("qformer", False)
+
+    qformer = None
 
     if text_encoder is None and use_contriever:
         text_encoder = load_text_encoder(cfg.text_encoder_model, device_map="auto")
+    if use_qformer:
+        from .models import load_qformer
+        from .encoders import QFormerEncoder
+
+        model, processor = load_qformer(
+            cfg.qformer_model,
+            device=device,
+            provider=cfg.qformer_provider,
+            weights_path=cfg.qformer_weights,
+        )
+        qformer = QFormerEncoder(model, processor)
     if segmenter is None:
         if cfg.segment_level == "section":
             segmenter = SectionSegmenter()
         elif cfg.segment_level == "sentence":
             segmenter = SentenceSegmenter()
-        else:
-            segmenter = ParagraphSegmenter()
-
+        else:  # paragraph level
+            segmenter = ParagraphSegmenter(cfg.chunk_size)
+            
     # Load FAISS index and KB data once and cache globally
     global _FAISS_INDEX, _KB_IDS, _KB_LIST
     if _FAISS_INDEX is None or _KB_IDS is None:
@@ -124,7 +138,16 @@ def search_rag_pipeline(
                 unique_doc_indices.add(doc_idx)
 
     fused_embeddings = []
-    if use_contriever:
+    if use_qformer:
+        from .models import compute_late_interaction_similarity
+        query_tokens = qformer.encode_pair(cfg.image_path, cfg.text_query).unsqueeze(0)
+
+        for sec in filtered_sections:
+            cand_tokens = qformer.encode_pair(None, sec["section_text"]).unsqueeze(0)
+            score = compute_late_interaction_similarity(query_tokens, cand_tokens)[0].item()
+            sec["similarity"] = score
+
+    elif use_contriever:
         if text_encoder is None:
             text_encoder = load_text_encoder(cfg.text_encoder_model, device_map="auto")
 
@@ -193,7 +216,7 @@ def search_rag_pipeline(
                         best_score = score
             filtered_sections[i]["similarity"] = best_score
 
-    if use_jina:
+    if use_jina and not use_qformer:
         # Load the cross-encoder reranker on the target device
         reranker = load_jina_reranker(device)
         # Prepare query/document pairs for cross-encoder scoring

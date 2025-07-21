@@ -24,6 +24,10 @@ def normalize_title(title: Optional[str]) -> str:
 
 def evaluate(cfg: Config) -> None:
     """Compute retrieval accuracy for a dataset."""
+    if cfg.segment_level == "sentence":
+        print("Sentence-level evaluation is not supported. Use section or paragraph segmentation.")
+        return
+
     dataset = VQADataset(
         csv_path=cfg.dataset_csv,
         id2name_path=cfg.id2name_json,
@@ -66,6 +70,8 @@ def evaluate(cfg: Config) -> None:
                 continue
             if doc_rank is None:
                 doc_rank = i
+            # When using paragraph-level segmentation the paragraph is
+            # considered correct if it originates from the correct section.
             if sec.get("section_idx") == correct_idx:
                 sec_rank = i
                 break

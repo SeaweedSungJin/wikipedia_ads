@@ -13,12 +13,18 @@ id2name_json: /dataset/inaturalist/train_id2name.json
 dataset_image_root: /dataset/inaturalist
 dataset_google_root: /dataset/landmarks
 
-dataset_start: 0
-dataset_end: 300
+dataset_start: 4000
+dataset_end: 4300
 
 text_encoder_model: facebook/contriever
-segment_level: section
+segment_level: paragraph # "section", "paragraph" or "sentence"
+chunk_size: 1024
+qformer_model: Salesforce/blip2-flan-t5-xl
+qformer_provider: hf  # 'hf' or 'lavis'
+qformer_weights:
+
 # Reranker settings
 rerankers:
   contriever: false
-  jina_m0: true
+  jina_m0: false
+  qformer: true
