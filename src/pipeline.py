@@ -11,6 +11,7 @@ from typing import Dict, List, Tuple
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from .utils import download_nltk_data, load_image, load_faiss_and_ids, load_kb_list
 
 import torch
 
@@ -23,7 +24,7 @@ from .models import (
     load_jina_reranker,
     setup_cuda,
 )
-from .encoders import TextEncoder
+from .encoders import TextEncoder, JinaM0Encoder
 from .segmenter import (
     Segmenter,
     SectionSegmenter,
@@ -34,18 +35,6 @@ from .segmenter import (
 _FAISS_INDEX = None
 _KB_IDS = None
 _KB_LIST = None
-
-EXCLUDED_SECTIONS = {
-    "references",
-    "external links",
-    "see also",
-    "notes",
-    "bibliography",
-    "further reading",
-}
-# These sections typically contain meta information rather than
-# descriptive text, so we ignore them during ranking.
-
 
 def _get_image_offset(
     faiss_vidx: int, doc_idx: int, doc_idx_starts: Dict[int, int]
@@ -79,7 +68,10 @@ def search_rag_pipeline(
     print(f"Using device: {device}")
     image_model, image_processor = load_image_model(device_map=cfg.image_device)
 
-    if text_encoder is None:
+    use_contriever = cfg.rerankers.get("contriever", False)
+    use_jina = cfg.rerankers.get("jina_m0", False)
+
+    if text_encoder is None and use_contriever:
         text_encoder = load_text_encoder(cfg.text_encoder_model, device_map="auto")
     if segmenter is None:
         if cfg.segment_level == "section":
@@ -131,24 +123,32 @@ def search_rag_pipeline(
                 )
                 unique_doc_indices.add(doc_idx)
 
-    # Encode the question text and any image descriptions
-    query_emb = text_encoder.encode([cfg.text_query]).to(device)
-    valid_descriptions = [r["description"] for r in top_k_image_results if r["description"] and not r["description"].isspace()]
-    if valid_descriptions:
-        desc_embeddings = text_encoder.encode(valid_descriptions).to(device)
-    else:
-        desc_embeddings = torch.empty(0, query_emb.shape[1], device=device)
-
-    # Combine query and description embeddings for each image result
     fused_embeddings = []
-    desc_idx = 0
-    for res in top_k_image_results:
-        if res["description"] and not res["description"].isspace():
-            fused_emb = cfg.alpha * query_emb[0] + (1.0 - cfg.alpha) * desc_embeddings[desc_idx]
-            desc_idx += 1
+    if use_contriever:
+        if text_encoder is None:
+            text_encoder = load_text_encoder(cfg.text_encoder_model, device_map="auto")
+
+        # Encode the question text and any image descriptions
+        query_emb = text_encoder.encode([cfg.text_query]).to(device)
+        valid_descriptions = [
+            r["description"]
+            for r in top_k_image_results
+            if r["description"] and not r["description"].isspace()
+        ]
+        if valid_descriptions:
+            desc_embeddings = text_encoder.encode(valid_descriptions).to(device)
         else:
-            fused_emb = query_emb[0]
-        fused_embeddings.append(fused_emb.unsqueeze(0))
+            desc_embeddings = torch.empty(0, query_emb.shape[1], device=device)
+
+        # Combine query and description embeddings for each image result
+        desc_idx = 0
+        for res in top_k_image_results:
+            if res["description"] and not res["description"].isspace():
+                fused_emb = cfg.alpha * query_emb[0] + (1.0 - cfg.alpha) * desc_embeddings[desc_idx]
+                desc_idx += 1
+            else:
+                fused_emb = query_emb[0]
+            fused_embeddings.append(fused_emb.unsqueeze(0))
 
     # Collect candidate sections from documents appearing in image search
     all_sections_data = []
@@ -176,17 +176,7 @@ def search_rag_pipeline(
         top_idx = np.argsort(scores)[-keep_n:]
         filtered_sections = [all_sections_data[i] for i in top_idx]
         
-    # If a cross-encoder reranker is specified we bypass the text encoder
-    # similarity scoring and instead compute scores directly with the
-    # reranker model (e.g. "jinaai/jina-reranker-m0").
-    if cfg.ranker_model == "jinaai/jina-reranker-m0":
-        reranker = load_jina_reranker(device_map="auto")
-        inputs = [[cfg.text_query, s["section_text"]] for s in filtered_sections]
-        with torch.no_grad():
-            scores = reranker.compute_score(inputs, max_length=8192, doc_type="text")
-        for sec, score in zip(filtered_sections, scores):
-            sec["similarity"] = float(score)
-    else:
+    if use_contriever:
         # Embed all candidate section texts
         section_texts_list = [d["section_text"] for d in filtered_sections]
         section_embeddings = text_encoder.encode(section_texts_list).to(device)
@@ -203,6 +193,23 @@ def search_rag_pipeline(
                         best_score = score
             filtered_sections[i]["similarity"] = best_score
 
+    if use_jina:
+        # Load the cross-encoder reranker on the target device
+        reranker = load_jina_reranker(device)
+        jina_encoder = JinaM0Encoder(reranker)
+
+        # Create a multimodal embedding from the query text and image
+        query_emb = jina_encoder.encode_query(cfg.image_path, cfg.text_query).to(device)
+
+        # Embed all section texts with the same model
+        section_texts = [s["section_text"] for s in filtered_sections]
+        section_embs = jina_encoder.encode(section_texts).to(device)
+
+        # Compare query to each section via cosine similarity
+        for sec, emb in zip(filtered_sections, section_embs):
+            score = torch.nn.functional.cosine_similarity(query_emb.unsqueeze(0), emb.unsqueeze(0))[0].item()
+            sec["similarity"] = score
+            
     # Sort sections by similarity score and keep the top m results
     sorted_sections = sorted(
         filtered_sections, key=lambda x: x.get("similarity", -1), reverse=True

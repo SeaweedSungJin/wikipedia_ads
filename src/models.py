@@ -21,26 +21,39 @@ from transformers import (
     BitsAndBytesConfig,
 )
 
-def load_jina_reranker(device_map="auto"):
+def load_jina_reranker(device: str | None = None):
     """Load the Jina cross-modal reranker model.
 
-    This model scores a (query, document) pair directly rather than
-    producing embeddings, which can yield more accurate ranking.
+    This model scores a (query, document) pair directly. We avoid using
+    ``device_map`` here because partial weight loading can lead to meta tensor
+    errors when calling ``to()`` later. Instead the model is loaded in a single
+    step and then moved to the desired device.
     """
     global _RERANKER_MODEL
     if _RERANKER_MODEL is None:
         print("텍스트 리랭커 모델 로딩중...")
+        # Load directly onto the target device to avoid meta tensor issues
         model = AutoModel.from_pretrained(
             "jinaai/jina-reranker-m0",
             torch_dtype="auto",
             trust_remote_code=True,
-            device_map=device_map,
+            attn_implementation="flash_attention_2",
+            low_cpu_mem_usage=True,
         )
+        if device:
+            model.to(device)
         model.eval()
         _RERANKER_MODEL = model
     return _RERANKER_MODEL
 
+def jina_encode(model, query: str | None = None, image: str | None = None):
+    """Return a multimodal embedding using the Jina reranker model."""
 
+    # This helper mirrors the `compute_score` API but yields an embedding
+    # vector so we can compare queries and sections with cosine similarity.
+    inputs = {"text": query, "image": image}
+    with torch.no_grad():
+        return model.get_multimodal_embedding([inputs])[0]
 
 def get_device() -> str:
     """Return the name of the available torch device."""

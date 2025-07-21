@@ -11,11 +11,14 @@ image_device: 1
 dataset_csv: /dataset/evqa/test.csv
 id2name_json: /dataset/inaturalist/train_id2name.json
 dataset_image_root: /dataset/inaturalist
-googlelandmark_root: /dataset/landmarks
+dataset_google_root: /dataset/landmarks
 
 dataset_start: 0
-dataset_end: 10
+dataset_end: 5
 
-text_encoder_model: null #facebook/contriever
+text_encoder_model: facebook/contriever
 segment_level: section
-ranker_model: jinaai/jina-reranker-m0  # set to 'jinaai/jina-reranker-m0' to use Jina reranker
+# Reranker settings
+rerankers:
+  contriever: false
+  jina_m0: true

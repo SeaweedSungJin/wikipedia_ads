@@ -25,3 +25,19 @@ class HFTextEncoder(TextEncoder):
 
     def encode(self, texts: List[str]) -> torch.Tensor:
         return get_text_embedding(texts, self.model, self.tokenizer)
+
+class JinaM0Encoder(TextEncoder):
+    """Encode queries and texts with the Jina reranker model."""
+
+    def __init__(self, model):
+        self.model = model
+
+    def encode_query(self, image_path: str, query: str) -> torch.Tensor:
+        from .models import jina_encode
+
+        return jina_encode(self.model, query=query, image=image_path)
+
+    def encode(self, texts: List[str]) -> torch.Tensor:
+        from .models import jina_encode
+
+        return torch.stack([jina_encode(self.model, query=t) for t in texts])

@@ -4,9 +4,17 @@ from __future__ import annotations
 from typing import Dict, List
 import nltk
 
-from .pipeline import EXCLUDED_SECTIONS
 from .utils import download_nltk_data
 
+# Sections containing references or metadata that should not be ranked
+EXCLUDED_SECTIONS = {
+    "references",
+    "external links",
+    "see also",
+    "notes",
+    "bibliography",
+    "further reading",
+}
 
 class Segmenter:
     """Base class that yields text segments from a KB document."""
