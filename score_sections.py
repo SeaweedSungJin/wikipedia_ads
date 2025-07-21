@@ -115,4 +115,4 @@ if __name__ == "__main__":
     cfg = Config.from_yaml("config.yaml")
     if not cfg.dataset_csv or not cfg.id2name_json:
         raise ValueError("dataset_csv and id2name_json must be set in config")
-    evaluate(cfg)
+    evaluate(cfg) 

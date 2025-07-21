@@ -14,4 +14,4 @@ dataset_image_root: /dataset/inaturalist
 googlelandmark_root: /dataset/landmarks
 
 dataset_start: 0
-dataset_end: 2000
+dataset_end: 300

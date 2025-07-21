@@ -65,6 +65,9 @@ class VQADataset:
         print(
             f"CSV 파일 '{csv_path}' 로딩 완료. 총 {self.total_rows}개 행 (헤더 제외). 시작={start}, 끝={end}"
         )
+    
+    def __len__(self):
+         return self.end - self.start if self.end is not None else self.total_rows - self.start
 
     def _get_image_path(self, dataset_name: str, image_id: str) -> Optional[str]:
         """Resolve an image path based on dataset name and ID."""

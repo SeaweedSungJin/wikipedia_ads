@@ -64,12 +64,14 @@ def load_text_model(device_map: int | str = 1) -> Tuple[AutoModel, AutoTokenizer
     global _TEXT_MODEL, _TOKENIZER
     if _TEXT_MODEL is None or _TOKENIZER is None:
         print("텍스트 모델 로딩중...")
-        quant_cfg = BitsAndBytesConfig(load_in_8bit=True)
-        model_name = "lmsys/vicuna-7b-v1.5"
+        model_name = "facebook/contriever"
+
+        #quant_cfg = BitsAndBytesConfig(load_in_8bit=True)
+        #model_name = "lmsys/vicuna-7b-v1.5"
         model = AutoModel.from_pretrained(
             model_name,
-            quantization_config=quant_cfg,
-            low_cpu_mem_usage=True,
+            #quantization_config=quant_cfg,
+            #low_cpu_mem_usage=True,
             trust_remote_code=True,
             device_map=device_map,
         )

@@ -10,14 +10,14 @@
 }
 3. {
     Downside_Abbey, 
-    TEXT_QUERY = "In what county is downside abbey located?.", A="Somerset", 0
-    TEXT_QUERY = "How many monks lived at downside abbey in 2020?.", A="fifteen", 0
-    TEXT_QUERY = "downside abbey is a benedictine this?.", A="monastery", 0
-    TEXT_QUERY = "What type of monastery is this monastery?.", A="Benedictine", 0
-    TEXT_QUERY = "In what country is this abbey located?.", A="England", 0
-    TEXT_QUERY = "What was the subject of this abbey?.", A="Foundation and development", 2
-    TEXT_QUERY = "Who was elected the first abbot of this abbey in six years?.", A="Dom Nicholas Wetz", 3
-    TEXT_QUERY = "Who built the choir at this abbey?.", A="Thomas Garner", 8
+    TEXT_QUERY = "In what county is downside abbey located?", A="Somerset", 0
+    TEXT_QUERY = "How many monks lived at downside abbey in 2020?", A="fifteen", 0
+    TEXT_QUERY = "downside abbey is a benedictine this?", A="monastery", 0
+    TEXT_QUERY = "What type of monastery is this monastery?", A="Benedictine", 0
+    TEXT_QUERY = "In what country is this abbey located?", A="England", 0
+    TEXT_QUERY = "What was the subject of this abbey?", A="Foundation and development", 2
+    TEXT_QUERY = "Who was elected the first abbot of this abbey in six years?", A="Dom Nicholas Wetz", 3
+    TEXT_QUERY = "Who built the choir at this abbey?", A="Thomas Garner", 8
 }
 4. {
     Dendraster_excentricus,
