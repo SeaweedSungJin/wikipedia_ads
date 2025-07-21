@@ -22,29 +22,23 @@ from transformers import (
 )
 
 def load_jina_reranker(device: str | None = None):
-    """Load the Jina cross-modal reranker model.
-
-    This model scores a (query, document) pair directly. We avoid using
-    ``device_map`` here because partial weight loading can lead to meta tensor
-    errors when calling ``to()`` later. Instead the model is loaded in a single
-    step and then moved to the desired device.
-    """
+    """Load the Jina cross-modal reranker model."""
     global _RERANKER_MODEL
     if _RERANKER_MODEL is None:
         print("텍스트 리랭커 모델 로딩중...")
-        # Load directly onto the target device to avoid meta tensor issues
+        # 1) device_map으로 바로 올리기
         model = AutoModel.from_pretrained(
             "jinaai/jina-reranker-m0",
             torch_dtype="auto",
             trust_remote_code=True,
             attn_implementation="flash_attention_2",
-            low_cpu_mem_usage=True,
         )
-        if device:
-            model.to(device)
+        model.to(device)
         model.eval()
         _RERANKER_MODEL = model
+
     return _RERANKER_MODEL
+
 
 def jina_encode(model, query: str | None = None, image: str | None = None):
     """Return a multimodal embedding using the Jina reranker model."""
@@ -85,7 +79,7 @@ def load_image_model(device_map="auto") -> Tuple[AutoModel, CLIPImageProcessor]:
             trust_remote_code=True,
             quantization_config=quant_cfg,
             low_cpu_mem_usage=True,
-            device_map=device_map,
+            device_map=3,
         )
         processor = CLIPImageProcessor.from_pretrained("openai/clip-vit-large-patch14")
         model.eval()
