@@ -47,7 +47,9 @@ def jina_encode(model, query: str | None = None, image: str | None = None):
     # vector so we can compare queries and sections with cosine similarity.
     inputs = {"text": query, "image": image}
     with torch.no_grad():
-        return model.get_multimodal_embedding([inputs])[0]
+        # The Jina model exposes ``get_multimodal_embeddings`` which
+        # accepts a list of {"text": ..., "image": ...} dictionaries.
+        return model.get_multimodal_embeddings([inputs])[0]
 
 def get_device() -> str:
     """Return the name of the available torch device."""

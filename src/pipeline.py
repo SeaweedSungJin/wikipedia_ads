@@ -196,19 +196,18 @@ def search_rag_pipeline(
     if use_jina:
         # Load the cross-encoder reranker on the target device
         reranker = load_jina_reranker(device)
-        jina_encoder = JinaM0Encoder(reranker)
+        # Prepare query/document pairs for cross-encoder scoring
+        jina_inputs = [
+            [cfg.text_query, s["section_text"]] for s in filtered_sections
+        ]
 
-        # Create a multimodal embedding from the query text and image
-        query_emb = jina_encoder.encode_query(cfg.image_path, cfg.text_query).to(device)
+        with torch.no_grad():
+            scores = reranker.compute_score(
+                jina_inputs, max_length=8192, doc_type="text"
+            )
 
-        # Embed all section texts with the same model
-        section_texts = [s["section_text"] for s in filtered_sections]
-        section_embs = jina_encoder.encode(section_texts).to(device)
-
-        # Compare query to each section via cosine similarity
-        for sec, emb in zip(filtered_sections, section_embs):
-            score = torch.nn.functional.cosine_similarity(query_emb.unsqueeze(0), emb.unsqueeze(0))[0].item()
-            sec["similarity"] = score
+        for sec, score in zip(filtered_sections, scores):
+            sec["similarity"] = float(score)
             
     # Sort sections by similarity score and keep the top m results
     sorted_sections = sorted(

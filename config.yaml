@@ -14,7 +14,7 @@ dataset_image_root: /dataset/inaturalist
 dataset_google_root: /dataset/landmarks
 
 dataset_start: 0
-dataset_end: 5
+dataset_end: 300
 
 text_encoder_model: facebook/contriever
 segment_level: section
