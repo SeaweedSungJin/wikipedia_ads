@@ -97,7 +97,7 @@ def load_qformer(
                 provider = "hf"
 
         if provider == "hf":
-            from transformers import AutoProcessor
+            from transformers import AutoProcessor, Blip2Model
 
             # ``blip2_feature_extractor`` is a LAVIS alias and does not exist as
             # a HuggingFace repository.  Map it to a compatible checkpoint when
@@ -105,8 +105,11 @@ def load_qformer(
             hf_name = (
                 "Salesforce/blip2-flan-t5-xl" if model_name == "blip2_feature_extractor" else model_name
             )
-
-            model = AutoModel.from_pretrained(
+            # Load the base BLIP-2 model which exposes ``qformer_output``
+            # without requiring decoder inputs. Using ``Blip2Model`` avoids
+            # generation-specific arguments that ``Blip2ForConditionalGeneration``
+            # would expect.
+            model = Blip2Model.from_pretrained(
                 hf_name,
                 trust_remote_code=True,
                 low_cpu_mem_usage=True,

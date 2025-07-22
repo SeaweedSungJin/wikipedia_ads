@@ -120,6 +120,7 @@ def search_rag_pipeline(
     # Collect top-K image search results
     top_k_image_results: List[dict] = []
     unique_doc_indices = set()
+    doc_image_map: Dict[int, str] = {}
     for i in range(cfg.k_value):
         faiss_vidx = indices[0][i]
         doc_idx = kb_ids[faiss_vidx]
@@ -127,23 +128,27 @@ def search_rag_pipeline(
             doc = kb_list[doc_idx]
             offset = _get_image_offset(faiss_vidx, doc_idx, doc_idx_starts)
             if offset != -1 and offset < len(doc.get("image_reference_descriptions", [])):
+                img_url = doc["image_urls"][offset]
                 top_k_image_results.append(
                     {
                         "doc": doc,
                         "similarity": distances[0][i],
                         "description": doc["image_reference_descriptions"][offset],
-                        "image_url": doc["image_urls"][offset],
+                        "image_url": img_url,
                     }
                 )
                 unique_doc_indices.add(doc_idx)
+                if doc_idx not in doc_image_map:
+                    doc_image_map[doc_idx] = img_url
 
     fused_embeddings = []
+    filtered_sections: List[dict] = []  # ensure defined for all code paths
     if use_qformer:
         from .models import compute_late_interaction_similarity
         query_tokens = qformer.encode_pair(cfg.image_path, cfg.text_query).unsqueeze(0)
 
         for sec in filtered_sections:
-            cand_tokens = qformer.encode_pair(None, sec["section_text"]).unsqueeze(0)
+            cand_tokens = qformer.encode_pair(sec.get("image_url"), sec["section_text"]).unsqueeze(0)
             score = compute_late_interaction_similarity(query_tokens, cand_tokens)[0].item()
             sec["similarity"] = score
 
@@ -174,13 +179,16 @@ def search_rag_pipeline(
             fused_embeddings.append(fused_emb.unsqueeze(0))
 
     # Collect candidate sections from documents appearing in image search
-    all_sections_data = []
-    unique_docs = [kb_list[i] for i in unique_doc_indices]
-    for doc in unique_docs:
+    all_sections_data: List[dict] = []
+    unique_docs = [(i, kb_list[i]) for i in unique_doc_indices]
+    for doc_idx, doc in unique_docs:
         title = doc.get("title", "N/A")
         if any(phrase in title.lower() for phrase in ["list of", "outline of", "index of"]):
             continue
         segments = segmenter.get_segments(doc)
+        img_url = doc_image_map.get(doc_idx, doc.get("image_urls", [None])[0] if doc.get("image_urls") else None)
+        for seg in segments:
+            seg["image_url"] = img_url
         all_sections_data.extend(segments)
 
     if not all_sections_data:

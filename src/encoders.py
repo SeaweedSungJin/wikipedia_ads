@@ -74,10 +74,31 @@ class QFormerEncoder(TextEncoder):
             except TypeError:
                 inputs = self.processor(image=image, text=text, return_tensors="pt")
 
+            # ``Blip2Model`` requires ``decoder_input_ids`` for the language
+            # model even when we only need the Q-former outputs. Some processor
+            # variants may return ``None`` for ``input_ids`` when no tokenizer is
+            # provided, so fall back to calling the tokenizer explicitly.
+            input_ids = inputs.get("input_ids")
+            if input_ids is None and hasattr(self.processor, "tokenizer"):
+                input_ids = self.processor.tokenizer(text, return_tensors="pt").input_ids
+                inputs["input_ids"] = input_ids
+            if input_ids is not None and "decoder_input_ids" not in inputs:
+                inputs["decoder_input_ids"] = input_ids
+
             for k, v in inputs.items():
                 if hasattr(v, "to"):
                     inputs[k] = v.to(device)
 
             with torch.no_grad():
                 out = self.model(**inputs)
-            return out.get("qformer_output", out.last_hidden_state)
+
+            # HuggingFace ``Blip2Model`` returns ``qformer_output`` while other
+            # variants might expose ``last_hidden_state``. Support both to avoid
+            # attribute errors.
+            if hasattr(out, "qformer_output") and out.qformer_output is not None:
+                return out.qformer_output
+            if hasattr(out, "last_hidden_state"):
+                return out.last_hidden_state
+
+            # Fall back to the first element for plain tuple outputs
+            return out[0]
