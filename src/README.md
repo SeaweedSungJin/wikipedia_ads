@@ -8,10 +8,10 @@ configured at the section, paragraph or sentence level. Text sections are
 ranked by cosine similarity or optionally with cross-encoder rerankers.
 When `jina_m0` is enabled the model creates a multimodal embedding from the
 query image and text before comparing it to each candidate section.
-A `qformer` option is also provided which computes fine-grained similarity using
-Q-former tokens and a late-interaction score.  In this mode both the query and
-each candidate section are paired with their corresponding images before
-calculating similarity.
+A `qformer` option is also provided which computes fine‑grained similarity using
+Q-former tokens and a late-interaction score. The query image is always used,
+while candidate sections are currently encoded from text only (images can be
+added later) before calculating similarity.
 
 ## Usage
 
@@ -35,6 +35,8 @@ calculating similarity.
   `blip2_feature_extractor` to this checkpoint automatically when falling back
   to the HuggingFace loader. Provide a fine-tuned checkpoint via
   `qformer_weights` if desired.
+    Candidate section texts are truncated to 512 tokens when scoring with
+  Q-former to avoid GPU OOM errors with very long paragraphs.
 3. Run the pipeline for a single query
    ```bash
    python main.py
@@ -50,3 +52,14 @@ calculating similarity.
 
 The heavy models, FAISS index and KB JSON are cached so repeated runs are
 fast. Optional TF‑IDF filtering can be enabled in `config.yaml`.
+
+## Downloading Wikipedia images
+
+If you need offline images for evaluation, run:
+
+```bash
+python download_wiki_images.py /path/to/encyclopedic_kb_wiki_aug.jsonl
+```
+
+Images are stored under `datasets/wiki_images/<page_title>/` and include
+the image index and section number in the filename, e.g. `img_000_sec1.jpg`.

@@ -5,6 +5,7 @@ text_query: Who was elected the first abbot of this abbey in six years?
 k_value: 10
 m_value: 10
 alpha: 0.9
+first_image_only: false
 use_tfidf_filter: false
 tfidf_ratio: 0.5
 image_device: 1
@@ -15,9 +16,11 @@ dataset_google_root: /dataset/landmarks
 
 dataset_start: 4000
 dataset_end: 4300
+#dataset_start: 0
+#dataset_end: 5750
 
 text_encoder_model: facebook/contriever
-segment_level: paragraph # "section", "paragraph" or "sentence"
+segment_level: section # "section", "paragraph" or "sentence"
 chunk_size: 1024
 qformer_model: Salesforce/blip2-flan-t5-xl
 qformer_provider: hf  # 'hf' or 'lavis'
@@ -26,5 +29,5 @@ qformer_weights:
 # Reranker settings
 rerankers:
   contriever: false
-  jina_m0: false
-  qformer: true
+  jina_m0: true
+  qformer: false

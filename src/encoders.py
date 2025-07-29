@@ -7,6 +7,7 @@ import torch
 from transformers import AutoModel, AutoTokenizer
 
 from .embedding import get_text_embedding
+from PIL import Image
 
 
 class TextEncoder:
@@ -45,22 +46,26 @@ class JinaM0Encoder(TextEncoder):
 class QFormerEncoder(TextEncoder):
     """Encoder wrapper for a Q-former model producing token embeddings."""
 
-    def __init__(self, model, processor):
+    def __init__(self, model, processor, *, max_length: int = 512):
         self.model = model
         self.processor = processor
+        self.max_length = max_length
 
     def encode_pair(self, image_path: str | None, text: str) -> torch.Tensor:
         """Return Q-former token embeddings for an image/text pair."""
         from .utils import load_image
 
-        image = load_image(image_path) if image_path else None
+        if image_path:
+            image = load_image(image_path)
+        else:
+            image = Image.new("RGB", (224, 224), color=0)
         # LAVIS processors are provided as a dict with separate image/text
         # components.  HuggingFace processors mimic ``__call__``.
         device = next(self.model.parameters()).device
 
         if isinstance(self.processor, dict):
             image_tensor = self.processor["image"](image) if image is not None else None
-            text_tensor = self.processor["text"](text)
+            text_tensor = self.processor["text"](text, max_length=self.max_length)
             sample = {
                 "image": image_tensor.to(device) if hasattr(image_tensor, "to") else image_tensor,
                 "text_input": text_tensor.to(device) if hasattr(text_tensor, "to") else text_tensor,
@@ -70,9 +75,23 @@ class QFormerEncoder(TextEncoder):
             return out["qformer_output"]
         else:
             try:
-                inputs = self.processor(images=image, text=text, return_tensors="pt")
+                inputs = self.processor(
+                    images=image,
+                    text=text,
+                    return_tensors="pt",
+                    padding="max_length",
+                    truncation=True,
+                    max_length=self.max_length,
+                )
             except TypeError:
-                inputs = self.processor(image=image, text=text, return_tensors="pt")
+                inputs = self.processor(
+                    image=image,
+                    text=text,
+                    return_tensors="pt",
+                    padding="max_length",
+                    truncation=True,
+                    max_length=self.max_length,
+                )
 
             # ``Blip2Model`` requires ``decoder_input_ids`` for the language
             # model even when we only need the Q-former outputs. Some processor

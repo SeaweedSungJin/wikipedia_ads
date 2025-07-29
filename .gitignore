@@ -1,7 +1,10 @@
 test/
 datasets/real_images/
 datasets/test_images/
+datasets/cache_images/
+preprocess/
 check/
 datasets/__pycache__/
 __pycache__/
 *.pyc
+datasets/wiki_images/

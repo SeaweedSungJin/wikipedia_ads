@@ -115,15 +115,33 @@ def search_rag_pipeline(
     # Encode the query image and search the FAISS index
     img = load_image(cfg.image_path)
     img_emb_np = encode_image(img, image_model, image_processor).numpy()
-    distances, indices = faiss_index.search(img_emb_np, k=cfg.k_value)
+    # When configured, restrict the search to the first image from each document
+    if cfg.first_image_only:
+        doc_to_first_faiss_idx: Dict[int, int] = {}
+        for i, d_idx in enumerate(kb_ids):
+            if d_idx not in doc_to_first_faiss_idx:
+                doc_to_first_faiss_idx[d_idx] = i
+
+        search_k = min(cfg.k_value * 20, faiss_index.ntotal)
+        distances, indices = faiss_index.search(img_emb_np, k=search_k)
+    else:
+        distances, indices = faiss_index.search(img_emb_np, k=cfg.k_value)
 
     # Collect top-K image search results
     top_k_image_results: List[dict] = []
     unique_doc_indices = set()
     doc_image_map: Dict[int, str] = {}
-    for i in range(cfg.k_value):
+    limit = indices.shape[1]
+    for i in range(limit):
+        if len(unique_doc_indices) >= cfg.k_value:
+            break
         faiss_vidx = indices[0][i]
         doc_idx = kb_ids[faiss_vidx]
+
+        if cfg.first_image_only:
+            first_idx = doc_to_first_faiss_idx.get(doc_idx)
+            if first_idx is None or first_idx != faiss_vidx:
+                continue
         if 0 <= doc_idx < len(kb_list):
             doc = kb_list[doc_idx]
             offset = _get_image_offset(faiss_vidx, doc_idx, doc_idx_starts)
@@ -143,16 +161,7 @@ def search_rag_pipeline(
 
     fused_embeddings = []
     filtered_sections: List[dict] = []  # ensure defined for all code paths
-    if use_qformer:
-        from .models import compute_late_interaction_similarity
-        query_tokens = qformer.encode_pair(cfg.image_path, cfg.text_query).unsqueeze(0)
-
-        for sec in filtered_sections:
-            cand_tokens = qformer.encode_pair(sec.get("image_url"), sec["section_text"]).unsqueeze(0)
-            score = compute_late_interaction_similarity(query_tokens, cand_tokens)[0].item()
-            sec["similarity"] = score
-
-    elif use_contriever:
+    if use_contriever:
         if text_encoder is None:
             text_encoder = load_text_encoder(cfg.text_encoder_model, device_map="auto")
 
@@ -206,6 +215,25 @@ def search_rag_pipeline(
         keep_n = max(1, int(len(texts) * cfg.tfidf_ratio))
         top_idx = np.argsort(scores)[-keep_n:]
         filtered_sections = [all_sections_data[i] for i in top_idx]
+    else:
+        filtered_sections = all_sections_data
+
+    if use_qformer:
+        from .models import compute_late_interaction_similarity
+
+        query_tokens = qformer.encode_pair(cfg.image_path, cfg.text_query)
+        if query_tokens.dim() == 2:
+            query_tokens = query_tokens.unsqueeze(0)
+
+        for sec in filtered_sections:
+            # Temporarily ignore the candidate image while we download the
+            # Wikipedia dataset. Text-only embeddings can later be replaced by
+            # image-text pairs once the images are available.
+            cand_tokens = qformer.encode_pair(None, sec["section_text"])
+            if cand_tokens.dim() == 2:
+                cand_tokens = cand_tokens.unsqueeze(0)
+            score = compute_late_interaction_similarity(query_tokens, cand_tokens)[0].item()
+            sec["similarity"] = score
         
     if use_contriever:
         # Embed all candidate section texts

@@ -31,6 +31,9 @@ class Config:
     # Optional TF-IDF pre-filtering
     use_tfidf_filter: bool = False  # Whether to filter sections with TF-IDF
     tfidf_ratio: float = 0.5  # Ratio of sections to keep when filtering
+    
+    # Image search options
+    first_image_only: bool = False  # restrict FAISS search to first image per document
 
     # Dataset evaluation options
     dataset_csv: str | None = None  # Path to EVQA CSV file
