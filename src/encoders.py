@@ -121,3 +121,33 @@ class QFormerEncoder(TextEncoder):
 
             # Fall back to the first element for plain tuple outputs
             return out[0]
+
+
+class ColBERTEncoder(TextEncoder):
+    """Encoder for ColBERT-style token embeddings."""
+
+    def __init__(self, model, tokenizer, *, max_length: int = 180):
+        self.model = model
+        self.tokenizer = tokenizer
+        self.max_length = max_length
+
+    def encode_tokens(self, text: str) -> torch.Tensor:
+        inputs = self.tokenizer(
+            text,
+            return_tensors="pt",
+            padding="max_length",
+            truncation=True,
+            max_length=self.max_length,
+        )
+        device = next(self.model.parameters()).device
+        inputs = {k: v.to(device) for k, v in inputs.items()}
+        with torch.no_grad():
+            out = self.model(**inputs)
+        tokens = out.last_hidden_state.squeeze(0)
+        mask = inputs["attention_mask"].squeeze(0).bool()
+        return tokens[mask].cpu()
+
+    def encode(self, texts: List[str]) -> torch.Tensor:
+        # Mean pool for compatibility with the TextEncoder interface
+        embs = [self.encode_tokens(t).mean(dim=0) for t in texts]
+        return torch.stack(embs)

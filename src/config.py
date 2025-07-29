@@ -25,6 +25,9 @@ class Config:
     qformer_model: str = "Salesforce/blip2-flan-t5-xl"  # Q-former model name
     qformer_provider: str = "hf"  # "hf" or "lavis" loader
     qformer_weights: str | None = None  # optional fine-tuned weights path
+    colbert_model: str = "colbert-ir/colbertv2.0"  # ColBERT model name
+    bge_model: str = "BAAI/bge-reranker-v2-m3"  # BGE reranker model name
+
     # Which ranking modules to enable
     rerankers: dict = field(default_factory=dict)
 

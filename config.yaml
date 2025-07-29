@@ -25,9 +25,18 @@ chunk_size: 1024
 qformer_model: Salesforce/blip2-flan-t5-xl
 qformer_provider: hf  # 'hf' or 'lavis'
 qformer_weights:
+colbert_model: colbert-ir/colbertv2.0
+Top1 doc match: 31/300
+Top3 doc match: 55/300
+Top5 doc match: 72/300
+Top1 doc+section match: 51/300
+Top3 doc+section match: 69/300
+Top5 doc+section match: 76/300
 
 # Reranker settings
 rerankers:
   contriever: false
-  jina_m0: true
+  jina_m0: false
   qformer: false
+  colbert: false
+  bge: true

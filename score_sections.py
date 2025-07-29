@@ -49,7 +49,7 @@ def evaluate(cfg: Config) -> None:
             continue
         cfg.image_path = sample.image_paths[0]
         cfg.text_query = sample.question
-        _, sections = search_rag_pipeline(cfg)
+        image_results, sections = search_rag_pipeline(cfg)
         try:
             torch.cuda.empty_cache()
         except Exception:
@@ -63,13 +63,17 @@ def evaluate(cfg: Config) -> None:
         gt_title_norm = normalize_title(sample.wikipedia_title)
         doc_rank = None
         sec_rank = None
+        # Determine document rank from image search results only
+        for i, res in enumerate(image_results, 1):
+            if normalize_title(res["doc"].get("title")) == gt_title_norm:
+                doc_rank = i
+                break
 
         for i, sec in enumerate(sections, 1):
             sec_title_norm = normalize_title(sec.get("source_title"))
             if sec_title_norm != gt_title_norm:
                 continue
-            if doc_rank is None:
-                doc_rank = i
+
             # When using paragraph-level segmentation the paragraph is
             # considered correct if it originates from the correct section.
             if sec.get("section_idx") == correct_idx:

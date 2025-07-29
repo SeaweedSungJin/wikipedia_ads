@@ -71,8 +71,12 @@ def search_rag_pipeline(
     use_contriever = cfg.rerankers.get("contriever", False)
     use_jina = cfg.rerankers.get("jina_m0", False)
     use_qformer = cfg.rerankers.get("qformer", False)
+    use_colbert = cfg.rerankers.get("colbert", False)
+    use_bge = cfg.rerankers.get("bge", False)
 
     qformer = None
+    colbert = None
+    bge = None
 
     if text_encoder is None and use_contriever:
         text_encoder = load_text_encoder(cfg.text_encoder_model, device_map="auto")
@@ -87,6 +91,15 @@ def search_rag_pipeline(
             weights_path=cfg.qformer_weights,
         )
         qformer = QFormerEncoder(model, processor)
+    if use_colbert:
+        from .models import load_colbert
+        from .encoders import ColBERTEncoder
+
+        c_model, c_tok = load_colbert(cfg.colbert_model, device_map="auto")
+        colbert = ColBERTEncoder(c_model, c_tok)
+    if use_bge:
+        from .models import load_bge_reranker
+        bge_model, bge_tok = load_bge_reranker(cfg.bge_model, device)
     if segmenter is None:
         if cfg.segment_level == "section":
             segmenter = SectionSegmenter()
@@ -131,6 +144,7 @@ def search_rag_pipeline(
     top_k_image_results: List[dict] = []
     unique_doc_indices = set()
     doc_image_map: Dict[int, str] = {}
+
     limit = indices.shape[1]
     for i in range(limit):
         if len(unique_doc_indices) >= cfg.k_value:
@@ -142,6 +156,7 @@ def search_rag_pipeline(
             first_idx = doc_to_first_faiss_idx.get(doc_idx)
             if first_idx is None or first_idx != faiss_vidx:
                 continue
+
         if 0 <= doc_idx < len(kb_list):
             doc = kb_list[doc_idx]
             offset = _get_image_offset(faiss_vidx, doc_idx, doc_idx_starts)
@@ -234,6 +249,20 @@ def search_rag_pipeline(
                 cand_tokens = cand_tokens.unsqueeze(0)
             score = compute_late_interaction_similarity(query_tokens, cand_tokens)[0].item()
             sec["similarity"] = score
+
+    if use_colbert:
+        from .models import compute_late_interaction_similarity
+
+        query_tokens = colbert.encode_tokens(cfg.text_query)
+        if query_tokens.dim() == 2:
+            query_tokens = query_tokens.unsqueeze(0)
+
+        for sec in filtered_sections:
+            cand_tokens = colbert.encode_tokens(sec["section_text"])
+            if cand_tokens.dim() == 2:
+                cand_tokens = cand_tokens.unsqueeze(0)
+            score = compute_late_interaction_similarity(query_tokens, cand_tokens)[0].item()
+            sec["similarity"] = score
         
     if use_contriever:
         # Embed all candidate section texts
@@ -266,6 +295,18 @@ def search_rag_pipeline(
             )
 
         for sec, score in zip(filtered_sections, scores):
+            sec["similarity"] = float(score)
+
+    if use_bge and not use_qformer:
+        from .models import load_bge_reranker
+
+        model, tokenizer = load_bge_reranker(cfg.bge_model, device)
+        pairs = [[cfg.text_query, s["section_text"]] for s in filtered_sections]
+        inputs = tokenizer(pairs, padding=True, truncation=True, return_tensors="pt", max_length=512)
+        inputs = {k: v.to(device) for k, v in inputs.items()}
+        with torch.no_grad():
+            scores = model(**inputs, return_dict=True).logits.view(-1)
+        for sec, score in zip(filtered_sections, scores.cpu().float().tolist()):
             sec["similarity"] = float(score)
             
     # Sort sections by similarity score and keep the top m results

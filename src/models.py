@@ -13,7 +13,10 @@ _TOKENIZER = None
 _RERANKER_MODEL = None
 _QFORMER_MODEL = None
 _QFORMER_PROCESSOR = None
-
+_COLBERT_MODEL = None
+_COLBERT_TOKENIZER = None
+_BGE_MODEL = None
+_BGE_TOKENIZER = None
 
 import torch
 from transformers import (
@@ -126,6 +129,42 @@ def load_qformer(
         _QFORMER_MODEL, _QFORMER_PROCESSOR = model, processor
 
     return _QFORMER_MODEL, _QFORMER_PROCESSOR
+
+def load_colbert(model_name: str = "colbert-ir/colbertv2.0", device_map: int | str = "auto"):
+    """Load a ColBERT model from HuggingFace."""
+
+    global _COLBERT_MODEL, _COLBERT_TOKENIZER
+    if _COLBERT_MODEL is None or _COLBERT_TOKENIZER is None:
+        print("ColBERT 모델 로딩중...")
+        from transformers import AutoModel, AutoTokenizer
+
+        model = AutoModel.from_pretrained(
+            model_name,
+            trust_remote_code=True,
+            device_map=device_map,
+        )
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        model.eval()
+        _COLBERT_MODEL, _COLBERT_TOKENIZER = model, tokenizer
+
+    return _COLBERT_MODEL, _COLBERT_TOKENIZER
+
+def load_bge_reranker(model_name: str = "BAAI/bge-reranker-v2-m3", device: str | None = None):
+    """Load the BGE cross-encoder reranker."""
+
+    global _BGE_MODEL, _BGE_TOKENIZER
+    if _BGE_MODEL is None or _BGE_TOKENIZER is None:
+        print("BGE reranker 모델 로딩중...")
+        from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
+        model = AutoModelForSequenceClassification.from_pretrained(model_name)
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        if device:
+            model.to(device)
+        model.eval()
+        _BGE_MODEL, _BGE_TOKENIZER = model, tokenizer
+
+    return _BGE_MODEL, _BGE_TOKENIZER
 
 
 def compute_late_interaction_similarity(q_tokens: torch.Tensor, c_tokens: torch.Tensor) -> torch.Tensor:

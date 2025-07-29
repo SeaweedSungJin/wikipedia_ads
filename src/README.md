@@ -25,7 +25,7 @@ added later) before calculating similarity.
    `sentence`. When using paragraph mode you can adjust `chunk_size` to control
    the maximum characters per paragraph.
    The `rerankers` section lets you enable ranking modules such as
-  `contriever`, `jina_m0`, or `qformer` independently. When `qformer` is
+  `contriever`, `jina_m0`, `qformer`, `colbert`, or `bge` independently. When `qformer` is
   enabled the pipeline uses a Q-former model and late interaction similarity
   to rank sections. When loading via LAVIS, set `qformer_model` to
   `blip2_feature_extractor` with `qformer_provider: lavis`.  For a smaller
@@ -35,8 +35,13 @@ added later) before calculating similarity.
   `blip2_feature_extractor` to this checkpoint automatically when falling back
   to the HuggingFace loader. Provide a fine-tuned checkpoint via
   `qformer_weights` if desired.
-    Candidate section texts are truncated to 512 tokens when scoring with
+  Candidate section texts are truncated to 512 tokens when scoring with
   Q-former to avoid GPU OOM errors with very long paragraphs.
+  Setting `colbert` to true enables ColBERTv2 for reranking. The model
+  `colbert-ir/colbertv2.0` is loaded via HuggingFace and compared using the
+  same late interaction scoring as Q-former. Enabling `bge` loads the
+  lightweight cross-encoder `BAAI/bge-reranker-v2-m3` for multilingual
+  reranking.
 3. Run the pipeline for a single query
    ```bash
    python main.py
@@ -52,6 +57,8 @@ added later) before calculating similarity.
 
 The heavy models, FAISS index and KB JSON are cached so repeated runs are
 fast. Optional TF‑IDF filtering can be enabled in `config.yaml`.
+The `first_image_only` option restricts FAISS search to the first image of each
+document to test retrieval accuracy without considering additional images.
 
 ## Downloading Wikipedia images
 
