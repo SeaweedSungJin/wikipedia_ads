@@ -14,8 +14,8 @@ id2name_json: /dataset/inaturalist/train_id2name.json
 dataset_image_root: /dataset/inaturalist
 dataset_google_root: /dataset/landmarks
 
-dataset_start: 3940
-dataset_end: 3945
+dataset_start: 0
+dataset_end: 4750
 #dataset_start: 0
 #dataset_end: 4750
 
