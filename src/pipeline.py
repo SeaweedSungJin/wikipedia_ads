@@ -8,6 +8,8 @@ module level so that repeated calls do not incur additional load time.
 from __future__ import annotations
 
 from typing import Dict, List, Tuple
+import math
+import time
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -55,8 +57,19 @@ def search_rag_pipeline(
     cfg: Config,
     text_encoder: TextEncoder | None = None,
     segmenter: Segmenter | None = None,
-) -> Tuple[List[dict], List[dict]]:
-    """Execute the RAG search pipeline and return image and section results."""
+    return_time: bool = False,
+    return_candidates: bool = False,
+) -> (
+    Tuple[List[dict], List[dict]]
+    | Tuple[List[dict], List[dict], float]
+    | Tuple[List[dict], List[dict], List[dict]]
+    | Tuple[List[dict], List[dict], List[dict], float]
+):
+    """Execute the RAG search pipeline and return image and section results.
+
+    If ``return_time`` is True, the elapsed time (in seconds) for the search
+    after loading the knowledge base is also returned.
+    """
 
     # Ensure required NLTK data is present
     download_nltk_data()
@@ -118,6 +131,8 @@ def search_rag_pipeline(
     faiss_index, kb_ids = _FAISS_INDEX, _KB_IDS
     kb_list = _KB_LIST
 
+    start_time = time.time()
+
     # Build a lookup table so we can convert a FAISS index position back
     # into a per-document offset later when scoring sections.    
     doc_idx_starts = {}
@@ -128,17 +143,18 @@ def search_rag_pipeline(
     # Encode the query image and search the FAISS index
     img = load_image(cfg.image_path)
     img_emb_np = encode_image(img, image_model, image_processor).numpy()
-    # When configured, restrict the search to the first image from each document
+    # Optionally build a lookup of the first image index for each document
+    doc_to_first_faiss_idx: Dict[int, int] = {}
     if cfg.first_image_only:
-        doc_to_first_faiss_idx: Dict[int, int] = {}
         for i, d_idx in enumerate(kb_ids):
             if d_idx not in doc_to_first_faiss_idx:
                 doc_to_first_faiss_idx[d_idx] = i
 
-        search_k = min(cfg.k_value * 20, faiss_index.ntotal)
-        distances, indices = faiss_index.search(img_emb_np, k=search_k)
-    else:
-        distances, indices = faiss_index.search(img_emb_np, k=cfg.k_value)
+    # Retrieve more candidates than needed so that filtered pages
+    # (e.g., "list of" or "outline of" entries) can be skipped
+    search_k = min(cfg.k_value * 5, faiss_index.ntotal)
+    distances, indices = faiss_index.search(img_emb_np, k=search_k)
+
 
     # Collect top-K image search results
     top_k_image_results: List[dict] = []
@@ -159,6 +175,13 @@ def search_rag_pipeline(
 
         if 0 <= doc_idx < len(kb_list):
             doc = kb_list[doc_idx]
+
+            title = doc.get("title", "")
+            if any(
+                phrase in title.lower() for phrase in ["list of", "outline of", "index of"]
+            ):
+                continue
+
             offset = _get_image_offset(faiss_vidx, doc_idx, doc_idx_starts)
             if offset != -1 and offset < len(doc.get("image_reference_descriptions", [])):
                 img_url = doc["image_urls"][offset]
@@ -206,16 +229,23 @@ def search_rag_pipeline(
     all_sections_data: List[dict] = []
     unique_docs = [(i, kb_list[i]) for i in unique_doc_indices]
     for doc_idx, doc in unique_docs:
-        title = doc.get("title", "N/A")
-        if any(phrase in title.lower() for phrase in ["list of", "outline of", "index of"]):
-            continue
         segments = segmenter.get_segments(doc)
-        img_url = doc_image_map.get(doc_idx, doc.get("image_urls", [None])[0] if doc.get("image_urls") else None)
+        img_url = doc_image_map.get(
+            doc_idx,
+            doc.get("image_urls", [None])[0] if doc.get("image_urls") else None,
+        )
         for seg in segments:
             seg["image_url"] = img_url
         all_sections_data.extend(segments)
 
     if not all_sections_data:
+        elapsed = time.time() - start_time
+        if return_time and return_candidates:
+            return top_k_image_results, [], [], elapsed
+        if return_time:
+            return top_k_image_results, [], elapsed
+        if return_candidates:
+            return top_k_image_results, [], []
         return top_k_image_results, []
 
     # Optional TF-IDF filtering before expensive embedding comparison
@@ -302,18 +332,44 @@ def search_rag_pipeline(
 
         model, tokenizer = load_bge_reranker(cfg.bge_model, device)
         pairs = [[cfg.text_query, s["section_text"]] for s in filtered_sections]
-        inputs = tokenizer(pairs, padding=True, truncation=True, return_tensors="pt", max_length=512)
+        inputs = tokenizer(
+            pairs,
+            padding=True,
+            truncation=True,
+            return_tensors="pt",
+            max_length=512,
+        )
         inputs = {k: v.to(device) for k, v in inputs.items()}
         with torch.no_grad():
-            scores = model(**inputs, return_dict=True).logits.view(-1)
-        for sec, score in zip(filtered_sections, scores.cpu().float().tolist()):
+            scores = model(**inputs, return_dict=True).logits.view(-1).cpu().float()
+        for sec, score in zip(filtered_sections, scores.tolist()):
             sec["similarity"] = float(score)
             
-    # Sort sections by similarity score and keep the top m results
+    # Sort sections by similarity score
     sorted_sections = sorted(
         filtered_sections, key=lambda x: x.get("similarity", -1), reverse=True
     )
-    result = top_k_image_results, sorted_sections[: cfg.m_value]
+
+    # Only consider the top-M sections when computing confidence
+    top_m_sections = sorted_sections[: cfg.m_value]
+
+    if use_bge and not use_qformer and top_m_sections:
+        score_tensor = torch.tensor([s["similarity"] for s in top_m_sections])
+        probs = torch.softmax(score_tensor, dim=0).tolist()
+        for sec, prob in zip(top_m_sections, probs):
+            sec["prob"] = float(prob)
+        entropy = -sum(p * math.log(p + 1e-12) for p in probs)
+        norm = math.log(len(top_m_sections)) if len(top_m_sections) > 1 else 1.0
+        confidence = 1 - entropy / norm
+        if confidence >= cfg.bge_conf_threshold:
+            keep_n = 1
+        else:
+            keep_n = max(1, math.ceil((1 - confidence) * len(top_m_sections)))
+        final_sections = top_m_sections[:keep_n]
+    else:
+        final_sections = top_m_sections
+
+    elapsed = time.time() - start_time
 
     # Release any cached CUDA memory to avoid OOM when processing many queries
     try:
@@ -321,4 +377,10 @@ def search_rag_pipeline(
     except Exception:
         pass
 
-    return result
+    if return_time and return_candidates:
+        return top_k_image_results, top_m_sections, final_sections, elapsed
+    if return_time:
+        return top_k_image_results, final_sections, elapsed
+    if return_candidates:
+        return top_k_image_results, top_m_sections, final_sections
+    return top_k_image_results, final_sections

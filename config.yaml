@@ -14,10 +14,10 @@ id2name_json: /dataset/inaturalist/train_id2name.json
 dataset_image_root: /dataset/inaturalist
 dataset_google_root: /dataset/landmarks
 
-dataset_start: 0
-dataset_end: 4750
+dataset_start: 3940
+dataset_end: 3945
 #dataset_start: 0
-#dataset_end: 5750
+#dataset_end: 4750
 
 text_encoder_model: facebook/contriever
 segment_level: section # "section", "paragraph" or "sentence"
@@ -26,11 +26,12 @@ qformer_model: Salesforce/blip2-flan-t5-xl
 qformer_provider: hf  # 'hf' or 'lavis'
 qformer_weights:
 colbert_model: colbert-ir/colbertv2.0
+bge_conf_threshold: 0.5
 
 # Reranker settings
 rerankers:
   contriever: false
   jina_m0: false
   qformer: false
-  colbert: true
-  bge: false
+  colbert: false
+  bge: true

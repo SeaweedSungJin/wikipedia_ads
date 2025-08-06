@@ -49,7 +49,7 @@ def evaluate(cfg: Config) -> None:
             continue
         cfg.image_path = sample.image_paths[0]
         cfg.text_query = sample.question
-        image_results, sections = search_rag_pipeline(cfg)
+        image_results, sections, elapsed = search_rag_pipeline(cfg, return_time=True)
         try:
             torch.cuda.empty_cache()
         except Exception:
@@ -63,22 +63,19 @@ def evaluate(cfg: Config) -> None:
         gt_title_norm = normalize_title(sample.wikipedia_title)
         doc_rank = None
         sec_rank = None
-        # Determine ranks based on the final section ordering
-        doc_seen = {}
+        # Determine document rank from image search results only
+        for i, res in enumerate(image_results, 1):
+            if normalize_title(res["doc"].get("title")) == gt_title_norm:
+                doc_rank = i
+                break
 
         for i, sec in enumerate(sections, 1):
             sec_title_norm = normalize_title(sec.get("source_title"))
-            if sec_title_norm not in doc_seen:
-                doc_seen[sec_title_norm] = len(doc_seen) + 1
+            if sec_title_norm != gt_title_norm:
+                continue
 
-            if sec_title_norm == gt_title_norm:
-                if doc_rank is None:
-                    doc_rank = doc_seen[sec_title_norm]
+            # When using paragraph-level segmentation the paragraph is
 
-                # When using paragraph-level segmentation the paragraph is
-                # considered correct if it originates from the correct section.
-                if sec_rank is None and sec.get("section_idx") == correct_idx:
-                    sec_rank = i
 
             if doc_rank is not None and sec_rank is not None:
                 break
@@ -111,7 +108,8 @@ def evaluate(cfg: Config) -> None:
         print(
             f"[Row {sample.row_idx}] Top1: {top1_title} / {top1_sec} (#{top1_idx}) | "
             f"GT: {sample.wikipedia_title} (#{correct_idx}) | "
-            f"Doc rank: {doc_rank} | Section rank: {sec_rank}"
+            f"Doc rank: {doc_rank} | Section rank: {sec_rank} | "
+            f"Time: {elapsed:.2f}s"
         )
 
     if total == 0:

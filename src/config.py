@@ -27,7 +27,7 @@ class Config:
     qformer_weights: str | None = None  # optional fine-tuned weights path
     colbert_model: str = "colbert-ir/colbertv2.0"  # ColBERT model name
     bge_model: str = "BAAI/bge-reranker-v2-m3"  # BGE reranker model name
-
+    bge_conf_threshold: float = 0.5  # Confidence threshold for BGE scores
     # Which ranking modules to enable
     rerankers: dict = field(default_factory=dict)
 
@@ -69,5 +69,13 @@ class Config:
 
         if "rerankers" not in data:
             data["rerankers"] = {}
+
+        # Ignore any unexpected keys instead of raising a TypeError
+        valid_fields = set(cls.__dataclass_fields__)
+        unknown_keys = [k for k in list(data.keys()) if k not in valid_fields]
+        if unknown_keys:
+            print("Ignoring unknown config keys:", ", ".join(unknown_keys))
+            for k in unknown_keys:
+                data.pop(k)
 
         return cls(**data)

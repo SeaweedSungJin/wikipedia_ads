@@ -41,7 +41,9 @@ added later) before calculating similarity.
   `colbert-ir/colbertv2.0` is loaded via HuggingFace and compared using the
   same late interaction scoring as Q-former. Enabling `bge` loads the
   lightweight cross-encoder `BAAI/bge-reranker-v2-m3` for multilingual
-  reranking.
+  reranking. When `bge_conf_threshold` is set, the pipeline keeps only the top
+  section when the BGE score distribution has confidence above this threshold,
+  otherwise up to `m_value` sections are returned.
 3. Run the pipeline for a single query
    ```bash
    python main.py
