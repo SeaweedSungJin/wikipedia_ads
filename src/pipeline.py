@@ -26,7 +26,7 @@ from .models import (
     load_jina_reranker,
     setup_cuda,
 )
-from .encoders import TextEncoder, JinaM0Encoder
+from .encoders import TextEncoder
 from .segmenter import (
     Segmenter,
     SectionSegmenter,
@@ -59,6 +59,7 @@ def search_rag_pipeline(
     segmenter: Segmenter | None = None,
     return_time: bool = False,
     return_candidates: bool = False,
+    use_all_sections: bool = False,
 ) -> (
     Tuple[List[dict], List[dict]]
     | Tuple[List[dict], List[dict], float]
@@ -83,27 +84,14 @@ def search_rag_pipeline(
 
     use_contriever = cfg.rerankers.get("contriever", False)
     use_jina = cfg.rerankers.get("jina_m0", False)
-    use_qformer = cfg.rerankers.get("qformer", False)
     use_colbert = cfg.rerankers.get("colbert", False)
     use_bge = cfg.rerankers.get("bge", False)
 
-    qformer = None
     colbert = None
     bge = None
 
     if text_encoder is None and use_contriever:
         text_encoder = load_text_encoder(cfg.text_encoder_model, device_map="auto")
-    if use_qformer:
-        from .models import load_qformer
-        from .encoders import QFormerEncoder
-
-        model, processor = load_qformer(
-            cfg.qformer_model,
-            device=device,
-            provider=cfg.qformer_provider,
-            weights_path=cfg.qformer_weights,
-        )
-        qformer = QFormerEncoder(model, processor)
     if use_colbert:
         from .models import load_colbert
         from .encoders import ColBERTEncoder
@@ -152,9 +140,8 @@ def search_rag_pipeline(
 
     # Retrieve more candidates than needed so that filtered pages
     # (e.g., "list of" or "outline of" entries) can be skipped
-    search_k = min(cfg.k_value * 5, faiss_index.ntotal)
+    search_k = min(cfg.k_value * 20, faiss_index.ntotal)
     distances, indices = faiss_index.search(img_emb_np, k=search_k)
-
 
     # Collect top-K image search results
     top_k_image_results: List[dict] = []
@@ -167,6 +154,9 @@ def search_rag_pipeline(
             break
         faiss_vidx = indices[0][i]
         doc_idx = kb_ids[faiss_vidx]
+
+        if doc_idx in unique_doc_indices:
+            continue
 
         if cfg.first_image_only:
             first_idx = doc_to_first_faiss_idx.get(doc_idx)
@@ -263,23 +253,6 @@ def search_rag_pipeline(
     else:
         filtered_sections = all_sections_data
 
-    if use_qformer:
-        from .models import compute_late_interaction_similarity
-
-        query_tokens = qformer.encode_pair(cfg.image_path, cfg.text_query)
-        if query_tokens.dim() == 2:
-            query_tokens = query_tokens.unsqueeze(0)
-
-        for sec in filtered_sections:
-            # Temporarily ignore the candidate image while we download the
-            # Wikipedia dataset. Text-only embeddings can later be replaced by
-            # image-text pairs once the images are available.
-            cand_tokens = qformer.encode_pair(None, sec["section_text"])
-            if cand_tokens.dim() == 2:
-                cand_tokens = cand_tokens.unsqueeze(0)
-            score = compute_late_interaction_similarity(query_tokens, cand_tokens)[0].item()
-            sec["similarity"] = score
-
     if use_colbert:
         from .models import compute_late_interaction_similarity
 
@@ -311,7 +284,7 @@ def search_rag_pipeline(
                         best_score = score
             filtered_sections[i]["similarity"] = best_score
 
-    if use_jina and not use_qformer:
+    if use_jina:
         # Load the cross-encoder reranker on the target device
         reranker = load_jina_reranker(device)
         # Prepare query/document pairs for cross-encoder scoring
@@ -327,7 +300,7 @@ def search_rag_pipeline(
         for sec, score in zip(filtered_sections, scores):
             sec["similarity"] = float(score)
 
-    if use_bge and not use_qformer:
+    if use_bge:
         from .models import load_bge_reranker
 
         model, tokenizer = load_bge_reranker(cfg.bge_model, device)
@@ -350,24 +323,28 @@ def search_rag_pipeline(
         filtered_sections, key=lambda x: x.get("similarity", -1), reverse=True
     )
 
-    # Only consider the top-M sections when computing confidence
-    top_m_sections = sorted_sections[: cfg.m_value]
-
-    if use_bge and not use_qformer and top_m_sections:
-        score_tensor = torch.tensor([s["similarity"] for s in top_m_sections])
-        probs = torch.softmax(score_tensor, dim=0).tolist()
-        for sec, prob in zip(top_m_sections, probs):
-            sec["prob"] = float(prob)
-        entropy = -sum(p * math.log(p + 1e-12) for p in probs)
-        norm = math.log(len(top_m_sections)) if len(top_m_sections) > 1 else 1.0
-        confidence = 1 - entropy / norm
-        if confidence >= cfg.bge_conf_threshold:
-            keep_n = 1
-        else:
-            keep_n = max(1, math.ceil((1 - confidence) * len(top_m_sections)))
-        final_sections = top_m_sections[:keep_n]
+    if use_all_sections:
+        top_m_sections = sorted_sections
+        final_sections = sorted_sections
     else:
-        final_sections = top_m_sections
+        # Only consider the top-M sections when computing confidence
+        top_m_sections = sorted_sections[: cfg.m_value]
+
+        if use_bge and top_m_sections:
+            score_tensor = torch.tensor([s["similarity"] for s in top_m_sections])
+            probs = torch.softmax(score_tensor, dim=0).tolist()
+            for sec, prob in zip(top_m_sections, probs):
+                sec["prob"] = float(prob)
+            entropy = -sum(p * math.log(p + 1e-12) for p in probs)
+            norm = math.log(len(top_m_sections)) if len(top_m_sections) > 1 else 1.0
+            confidence = 1 - entropy / norm
+            if confidence >= cfg.bge_conf_threshold:
+                keep_n = 1
+            else:
+                keep_n = max(1, math.ceil((1 - confidence) * len(top_m_sections)))
+            final_sections = top_m_sections[:keep_n]
+        else:
+            final_sections = top_m_sections
 
     elapsed = time.time() - start_time
 

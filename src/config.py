@@ -22,12 +22,13 @@ class Config:
     text_encoder_model: str = "facebook/contriever"  # HuggingFace model name
     segment_level: str = "section"  # "section", "paragraph" or "sentence"
     chunk_size: int = 1024  # Maximum characters per segment when splitting
-    qformer_model: str = "Salesforce/blip2-flan-t5-xl"  # Q-former model name
-    qformer_provider: str = "hf"  # "hf" or "lavis" loader
-    qformer_weights: str | None = None  # optional fine-tuned weights path
     colbert_model: str = "colbert-ir/colbertv2.0"  # ColBERT model name
     bge_model: str = "BAAI/bge-reranker-v2-m3"  # BGE reranker model name
     bge_conf_threshold: float = 0.5  # Confidence threshold for BGE scores
+    nli_model: str = "MoritzLaurer/DeBERTa-v3-base-mnli"  # NLI model for clustering
+    nli_threshold: float = 0.6  # Entailment prob threshold for clustering
+    nli_max_length: int = 512  # Max tokens per NLI input pair
+    nli_max_cluster: int = 3  # Max sections per NLI cluster
     # Which ranking modules to enable
     rerankers: dict = field(default_factory=dict)
 
