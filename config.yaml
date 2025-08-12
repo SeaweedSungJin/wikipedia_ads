@@ -5,7 +5,7 @@ text_query: Who built the choir at this abbey?
 k_value: 10
 m_value: 10
 alpha: 0.9
-first_image_only: false
+first_image_only: true
 use_tfidf_filter: false
 tfidf_ratio: 0.5
 image_device: cuda:2
@@ -19,7 +19,7 @@ dataset_image_root: /dataset/inaturalist
 dataset_google_root: /dataset/landmarks
 
 dataset_start: 500
-dataset_end: 1000
+dataset_end: 501
 #dataset_start: 0
 #dataset_end: 4750
 

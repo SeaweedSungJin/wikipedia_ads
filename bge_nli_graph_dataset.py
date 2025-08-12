@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Optional
+
 import logging
 import time
 import torch
@@ -11,6 +13,17 @@ from src.nli_cluster import load_nli_model, cluster_sections_clique
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def normalize_title(title: Optional[str]) -> str:
+    if not isinstance(title, str):
+        return ""
+    import re
+    title = title.lower()
+    title = re.sub(r"\([^)]*\)", "", title)
+    title = re.sub(r"[^a-z0-9\s]", "", title)
+    title = re.sub(r"\s+", " ", title)
+    return title.strip()
 
 
 def run_bge_nli_graph_dataset(cfg: Config) -> None:
@@ -46,6 +59,7 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
     sample_total = 0
 
     k_values = [1, 3, 5, 10]
+    img_doc_hits = {k: 0 for k in k_values}
     bge_doc_hits = {k: 0 for k in k_values}
     bge_sec_hits = {k: 0 for k in k_values}
     nli_doc_hits = {k: 0 for k in k_values}
@@ -69,6 +83,17 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
         for i, res in enumerate(img_results, 1):
             title = res["doc"].get("title", "")
             print(f"  {i}. {title}")
+
+        gt_norm = normalize_title(sample.wikipedia_title)
+        doc_rank = None
+        for i, res in enumerate(img_results, 1):
+            if normalize_title(res["doc"].get("title")) == gt_norm:
+                doc_rank = i
+                break
+        print(f"정답 문서: {sample.wikipedia_title} | rank: {doc_rank}")
+        for k in k_values:
+            if doc_rank is not None and doc_rank <= k:
+                img_doc_hits[k] += 1
 
         if top_sections:
             print("-- BGE 섹션 점수 (Top-M) --")
@@ -174,6 +199,9 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
             torch.cuda.empty_cache()
 
     print("\n-- 평가 요약 --")
+    print("Image search:")
+    for k in k_values:
+        print(f"  Recall@{k} 문서 일치: {img_doc_hits[k]}/{sample_total}")
     print("BGE reranker:")
     for k in k_values:
         print(f"  Recall@{k} 문서 일치: {bge_doc_hits[k]}/{sample_total}")
