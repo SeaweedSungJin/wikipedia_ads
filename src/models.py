@@ -42,25 +42,6 @@ def load_jina_reranker(device: str | None = None):
 
     return _RERANKER_MODEL
 
-def load_colbert(model_name: str = "colbert-ir/colbertv2.0", device_map: int | str = "auto"):
-    """Load a ColBERT model from HuggingFace."""
-
-    global _COLBERT_MODEL, _COLBERT_TOKENIZER
-    if _COLBERT_MODEL is None or _COLBERT_TOKENIZER is None:
-        print("ColBERT 모델 로딩중...")
-        from transformers import AutoModel, AutoTokenizer
-
-        model = AutoModel.from_pretrained(
-            model_name,
-            trust_remote_code=True,
-            device_map=device_map,
-        )
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-        model.eval()
-        _COLBERT_MODEL, _COLBERT_TOKENIZER = model, tokenizer
-
-    return _COLBERT_MODEL, _COLBERT_TOKENIZER
-
 def load_bge_reranker(model_name: str = "BAAI/bge-reranker-v2-m3", device: str | None = None):
     """Load the BGE cross-encoder reranker."""
 
@@ -77,20 +58,6 @@ def load_bge_reranker(model_name: str = "BAAI/bge-reranker-v2-m3", device: str |
         _BGE_MODEL, _BGE_TOKENIZER = model, tokenizer
 
     return _BGE_MODEL, _BGE_TOKENIZER
-
-
-def compute_late_interaction_similarity(q_tokens: torch.Tensor, c_tokens: torch.Tensor) -> torch.Tensor:
-    """Return late interaction similarity score for two token sequences."""
-
-    # Normalize embeddings
-    q_tokens = torch.nn.functional.normalize(q_tokens, dim=-1)
-    c_tokens = torch.nn.functional.normalize(c_tokens, dim=-1)
-    # Compute pairwise dot products
-    sim_matrix = torch.bmm(q_tokens, c_tokens.transpose(1, 2))
-    # Take best candidate token per query token
-    max_sim = sim_matrix.max(dim=2).values
-    # Sum over query tokens
-    return max_sim.sum(dim=1)
 
 def jina_encode(model, query: str | None = None, image: str | None = None):
     """Return a multimodal embedding using the Jina reranker model."""
@@ -118,7 +85,6 @@ def setup_cuda() -> None:
         torch.cuda.empty_cache()
         # Enable segmented memory allocation
         os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
-
 
 def load_image_model(device_map="auto") -> Tuple[AutoModel, CLIPImageProcessor]:
     """Load EVA-CLIP image model, caching the result."""

@@ -8,32 +8,40 @@ alpha: 0.9
 first_image_only: false
 use_tfidf_filter: false
 tfidf_ratio: 0.5
-image_device: 1
+image_device: cuda:2
+# Device placement
+bge_device: cuda:1
+nli_device: cuda:3
+nli_batch_size: 32
 dataset_csv: /dataset/evqa/test.csv
 id2name_json: /dataset/inaturalist/train_id2name.json
 dataset_image_root: /dataset/inaturalist
 dataset_google_root: /dataset/landmarks
 
-dataset_start: 0
-dataset_end: 4750
+dataset_start: 500
+dataset_end: 1000
 #dataset_start: 0
 #dataset_end: 4750
 
 text_encoder_model: facebook/contriever
 segment_level: section # "section", "paragraph" or "sentence"
 chunk_size: 1024
-colbert_model: colbert-ir/colbertv2.0
-bge_model: BAAI/bge-reranker-v2-m3
-bge_conf_threshold: 0.5
+#bge_model: BAAI/bge-reranker-v2-m3
+bge_model: BAAI/bge-reranker-large
+bge_conf_threshold: 0.3
+hyde_model: google/flan-t5-small
 nli_model: tasksource/deberta-base-long-nli
 #nli_model: MoritzLaurer/DeBERTa-v3-large-mnli-fever-anli-ling-wanli
-nli_threshold: 0.6
+nli_threshold: 0.1
 nli_max_length: 1024
 nli_max_cluster: 3
+nli_e_min: 0.3
+nli_margin: 0.10
+nli_tau: 0.20
+nli_lambda: 1.0
 
 # Reranker settings
 rerankers:
   contriever: false
   jina_m0: false
-  colbert: false
   bge: true

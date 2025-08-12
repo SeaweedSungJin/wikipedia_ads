@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import logging
+import time
 import torch
 from src.config import Config
 from src.dataloader import VQADataset
 from src.pipeline import search_rag_pipeline
-from src.nli_cluster import load_nli_model, build_relation_graph, maximal_cliques
+from src.nli_cluster import load_nli_model, cluster_sections_clique
+
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 def run_bge_nli_graph_dataset(cfg: Config) -> None:
@@ -18,10 +24,25 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
     )
     print(f"데이터셋 평가 범위: start={cfg.dataset_start}, end={cfg.dataset_end}.")
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model, tokenizer = load_nli_model(cfg.nli_model, device)
+    def _resolve(dev):
+        if isinstance(dev, int):
+            dev = f"cuda:{dev}"
+        if not torch.cuda.is_available() and isinstance(dev, str) and "cuda" in dev:
+            dev = "cpu"
+        return torch.device(dev)
 
-    total_elapsed = 0.0
+    device = _resolve(cfg.nli_device)
+    model, tokenizer = load_nli_model(cfg.nli_model, device)
+    logger.info(
+        "NLI clustering mode: clique-weighted (ent-contr), nli_threshold is ignored; using e_min/margin/tau"
+    )
+    print(
+        "이미지 검색 모드:",
+        "대표 이미지 1개만 사용" if cfg.first_image_only else "문서의 모든 이미지 사용",
+    )
+
+    total_bge_elapsed = 0.0
+    total_nli_elapsed = 0.0
     sample_total = 0
 
     k_values = [1, 3, 5, 10]
@@ -36,10 +57,10 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
         cfg.image_path = sample.image_paths[0]
         cfg.text_query = sample.question
 
-        img_results, top_sections, _, elapsed = search_rag_pipeline(
+        img_results, top_sections, _, bge_elapsed = search_rag_pipeline(
             cfg, return_time=True, return_candidates=True
         )
-        total_elapsed += elapsed
+        total_bge_elapsed += bge_elapsed
         sample_total += 1
 
         print(f"\n=== Row {sample.row_idx} ===")
@@ -75,33 +96,39 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
                 ):
                     bge_sec_hits[k] += 1
 
-            adj, stats = build_relation_graph(
+            nli_start = time.time()
+            e_min = getattr(cfg, "nli_e_min", None) or getattr(cfg, "nli_threshold", 0.5)
+            clusters, stats = cluster_sections_clique(
                 top_sections,
                 model=model,
                 tokenizer=tokenizer,
                 max_length=cfg.nli_max_length,
                 device=device,
+                max_cluster_size=cfg.nli_max_cluster,
+                lambda_score=cfg.nli_lambda,
+                e_min=e_min,
+                margin=cfg.nli_margin,
+                tau=cfg.nli_tau,
+                batch_size=cfg.nli_batch_size,
             )
+            nli_elapsed = time.time() - nli_start
+            total_nli_elapsed += nli_elapsed
             print("-- NLI 관계 그래프 --")
             print(
                 f"  entailment edges: {stats['entailment']}, "
                 f"neutral edges: {stats['neutral']}, contradictions: {stats['contradiction']}"
             )
-            cliques = maximal_cliques(adj)
-            clusters = []
-            for cl in cliques:
-                members = [top_sections[i] for i in cl]
-                avg_score = sum(m.get("similarity", 0.0) for m in members) / len(members)
-                members.sort(key=lambda s: s.get("similarity", 0.0), reverse=True)
-                if cfg.nli_max_cluster and len(members) > cfg.nli_max_cluster:
-                    members = members[: cfg.nli_max_cluster]
-                clusters.append({"avg_score": avg_score, "sections": members})
 
-            clusters.sort(key=lambda c: c["avg_score"], reverse=True)
-
+            raw = stats.get("raw_cliques")
+            if raw:
+                raw = [[i + 1 for i in cl] for cl in raw]
+            print("Clusters (indices):", raw)
             print("-- 최종 NLI 클러스터 (그래프 기반) --")
             for c_idx, cl in enumerate(clusters, 1):
-                print(f"Cluster {c_idx}: avg_score={cl['avg_score']:.3f}")
+                idx_disp = [i + 1 for i in cl["indices"]]
+                print(
+                    f"Cluster {c_idx} indices={idx_disp}: avg_score={cl['avg_score']:.3f}"
+                )
                 for sec in cl["sections"]:
                     stitle = sec.get("source_title", "")
                     sectitle = sec.get("section_title", "")
@@ -138,8 +165,11 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
                     nli_sec_hits[k] += 1
         else:
             print("섹션 결과가 없습니다.")
+            nli_elapsed = 0.0
 
-        print(f"총 검색 시간: {elapsed:.2f}s")
+        print(f"BGE 검색 시간: {bge_elapsed:.2f}s")
+        print(f"NLI 클러스터링 시간: {nli_elapsed:.2f}s")
+        print(f"총 검색 시간: {bge_elapsed + nli_elapsed:.2f}s")
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
@@ -152,7 +182,9 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
     for k in k_values:
         print(f"  Recall@{k} 문서 일치: {nli_doc_hits[k]}/{sample_total}")
         print(f"  Recall@{k} 문서+섹션 일치: {nli_sec_hits[k]}/{sample_total}")
-    print(f"총 검색 시간 합계: {total_elapsed:.2f}s")
+    print(f"BGE 검색 시간 합계: {total_bge_elapsed:.2f}s")
+    print(f"NLI 클러스터링 시간 합계: {total_nli_elapsed:.2f}s")
+    print(f"총 검색 시간 합계: {total_bge_elapsed + total_nli_elapsed:.2f}s")
 
 
 if __name__ == "__main__":

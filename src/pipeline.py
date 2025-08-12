@@ -25,6 +25,7 @@ from .models import (
     load_text_encoder,
     load_jina_reranker,
     setup_cuda,
+    load_bge_reranker,
 )
 from .encoders import TextEncoder
 from .segmenter import (
@@ -37,6 +38,15 @@ from .segmenter import (
 _FAISS_INDEX = None
 _KB_IDS = None
 _KB_LIST = None
+_BGE_CACHE = None
+
+
+def _get_bge(model_name: str, device):
+    """Load the BGE reranker once and cache it globally."""
+    global _BGE_CACHE
+    if _BGE_CACHE is None:
+        _BGE_CACHE = load_bge_reranker(model_name, device)
+    return _BGE_CACHE
 
 def _get_image_offset(
     faiss_vidx: int, doc_idx: int, doc_idx_starts: Dict[int, int]
@@ -60,16 +70,22 @@ def search_rag_pipeline(
     return_time: bool = False,
     return_candidates: bool = False,
     use_all_sections: bool = False,
+    image_only: bool = False,
 ) -> (
-    Tuple[List[dict], List[dict]]
+    List[dict]
+    | Tuple[List[dict], float]
+    | Tuple[List[dict], List[dict]]
     | Tuple[List[dict], List[dict], float]
     | Tuple[List[dict], List[dict], List[dict]]
     | Tuple[List[dict], List[dict], List[dict], float]
 ):
     """Execute the RAG search pipeline and return image and section results.
 
-    If ``return_time`` is True, the elapsed time (in seconds) for the search
-    after loading the knowledge base is also returned.
+    If ``image_only`` is True, only image search is performed and the function
+    returns the retrieved document list (and optionally the elapsed time). When
+    ``image_only`` is False, the pipeline proceeds to segment and rerank
+    sections as usual.  If ``return_time`` is True, the elapsed time (in
+    seconds) for the search after loading the knowledge base is also returned.
     """
 
     # Ensure required NLTK data is present
@@ -84,23 +100,10 @@ def search_rag_pipeline(
 
     use_contriever = cfg.rerankers.get("contriever", False)
     use_jina = cfg.rerankers.get("jina_m0", False)
-    use_colbert = cfg.rerankers.get("colbert", False)
     use_bge = cfg.rerankers.get("bge", False)
-
-    colbert = None
-    bge = None
 
     if text_encoder is None and use_contriever:
         text_encoder = load_text_encoder(cfg.text_encoder_model, device_map="auto")
-    if use_colbert:
-        from .models import load_colbert
-        from .encoders import ColBERTEncoder
-
-        c_model, c_tok = load_colbert(cfg.colbert_model, device_map="auto")
-        colbert = ColBERTEncoder(c_model, c_tok)
-    if use_bge:
-        from .models import load_bge_reranker
-        bge_model, bge_tok = load_bge_reranker(cfg.bge_model, device)
     if segmenter is None:
         if cfg.segment_level == "section":
             segmenter = SectionSegmenter()
@@ -189,6 +192,17 @@ def search_rag_pipeline(
 
     fused_embeddings = []
     filtered_sections: List[dict] = []  # ensure defined for all code paths
+
+    if image_only:
+        elapsed = time.time() - start_time
+        try:
+            torch.cuda.empty_cache()
+        except Exception:
+            pass
+        if return_time:
+            return top_k_image_results, elapsed
+        return top_k_image_results
+
     if use_contriever:
         if text_encoder is None:
             text_encoder = load_text_encoder(cfg.text_encoder_model, device_map="auto")
@@ -253,20 +267,6 @@ def search_rag_pipeline(
     else:
         filtered_sections = all_sections_data
 
-    if use_colbert:
-        from .models import compute_late_interaction_similarity
-
-        query_tokens = colbert.encode_tokens(cfg.text_query)
-        if query_tokens.dim() == 2:
-            query_tokens = query_tokens.unsqueeze(0)
-
-        for sec in filtered_sections:
-            cand_tokens = colbert.encode_tokens(sec["section_text"])
-            if cand_tokens.dim() == 2:
-                cand_tokens = cand_tokens.unsqueeze(0)
-            score = compute_late_interaction_similarity(query_tokens, cand_tokens)[0].item()
-            sec["similarity"] = score
-        
     if use_contriever:
         # Embed all candidate section texts
         section_texts_list = [d["section_text"] for d in filtered_sections]
@@ -301,9 +301,12 @@ def search_rag_pipeline(
             sec["similarity"] = float(score)
 
     if use_bge:
-        from .models import load_bge_reranker
-
-        model, tokenizer = load_bge_reranker(cfg.bge_model, device)
+        bge_dev = (
+            f"cuda:{cfg.bge_device}" if isinstance(cfg.bge_device, int) else cfg.bge_device
+        )
+        if not torch.cuda.is_available() and isinstance(bge_dev, str) and "cuda" in bge_dev:
+            bge_dev = "cpu"
+        model, tokenizer = _get_bge(cfg.bge_model, bge_dev)
         pairs = [[cfg.text_query, s["section_text"]] for s in filtered_sections]
         inputs = tokenizer(
             pairs,
@@ -312,7 +315,7 @@ def search_rag_pipeline(
             return_tensors="pt",
             max_length=512,
         )
-        inputs = {k: v.to(device) for k, v in inputs.items()}
+        inputs = {k: v.to(bge_dev) for k, v in inputs.items()}
         with torch.no_grad():
             scores = model(**inputs, return_dict=True).logits.view(-1).cpu().float()
         for sec, score in zip(filtered_sections, scores.tolist()):

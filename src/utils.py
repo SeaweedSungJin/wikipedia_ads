@@ -55,6 +55,14 @@ def load_faiss_and_ids(base_path: str) -> Tuple[faiss.Index, List[int]]:
         ids = pickle.load(f)
     return index, ids
 
+def load_text_faiss_and_ids(base_path: str) -> Tuple[faiss.Index, List[Tuple[int, int]]]:
+    """Load text FAISS index and mapping IDs for HyDE retrieval."""
+
+    print("텍스트 FAISS 인덱스 로딩중...")
+    index = faiss.read_index(os.path.join(base_path, "kb_text_index.faiss"))
+    with open(os.path.join(base_path, "kb_text_ids.pkl"), "rb") as f:
+        ids = pickle.load(f)
+    return index, ids
 
 def load_kb_list(json_path: str) -> List[dict]:
     """Load the KB JSONL file."""

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 import torch
 from src.config import Config
 from src.dataloader import VQADataset
@@ -18,10 +19,18 @@ def run_bge_nli_dataset(cfg: Config) -> None:
     )
     print(f"데이터셋 평가 범위: start={cfg.dataset_start}, end={cfg.dataset_end}.")
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    def _resolve(dev):
+        if isinstance(dev, int):
+            dev = f"cuda:{dev}"
+        if not torch.cuda.is_available() and isinstance(dev, str) and "cuda" in dev:
+            dev = "cpu"
+        return torch.device(dev)
+
+    device = _resolve(cfg.nli_device)
     model, tokenizer = load_nli_model(cfg.nli_model, device)
 
-    total_elapsed = 0.0
+    total_bge_elapsed = 0.0
+    total_nli_elapsed = 0.0
     sample_total = 0
 
     # Track recall metrics for BGE-only sections and final NLI clustering
@@ -37,10 +46,10 @@ def run_bge_nli_dataset(cfg: Config) -> None:
         cfg.image_path = sample.image_paths[0]
         cfg.text_query = sample.question
 
-        img_results, top_sections, _, elapsed = search_rag_pipeline(
+        img_results, top_sections, _, bge_elapsed = search_rag_pipeline(
             cfg, return_time=True, return_candidates=True
         )
-        total_elapsed += elapsed
+        total_bge_elapsed += bge_elapsed
         sample_total += 1
 
         print(f"\n=== Row {sample.row_idx} ===")
@@ -76,6 +85,7 @@ def run_bge_nli_dataset(cfg: Config) -> None:
                 ):
                     bge_sec_hits[k] += 1
 
+            nli_start = time.time()
             clusters = cluster_sections(
                 top_sections,
                 model=model,
@@ -84,7 +94,15 @@ def run_bge_nli_dataset(cfg: Config) -> None:
                 max_length=cfg.nli_max_length,
                 device=device,
                 max_cluster_size=cfg.nli_max_cluster,
+                batch_size=cfg.nli_batch_size,
             )
+            nli_elapsed = time.time() - nli_start
+            total_nli_elapsed += nli_elapsed
+
+            print("-- NLI 클러스터 (섹션 인덱스) --")
+            for cl in clusters:
+                idx_str = ", ".join(str(i + 1) for i in cl["indices"])
+                print(f"  ({idx_str})")
 
             print("-- 최종 NLI 클러스터 --")
             for c_idx, cl in enumerate(clusters, 1):
@@ -127,8 +145,11 @@ def run_bge_nli_dataset(cfg: Config) -> None:
                     nli_sec_hits[k] += 1
         else:
             print("섹션 결과가 없습니다.")
+            nli_elapsed = 0.0
 
-        print(f"총 검색 시간: {elapsed:.2f}s")
+        print(f"BGE 검색 시간: {bge_elapsed:.2f}s")
+        print(f"NLI 클러스터링 시간: {nli_elapsed:.2f}s")
+        print(f"총 검색 시간: {bge_elapsed + nli_elapsed:.2f}s")
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
@@ -149,7 +170,9 @@ def run_bge_nli_dataset(cfg: Config) -> None:
         print(
             f"  Recall@{k} 문서+섹션 일치: {nli_sec_hits[k]}/{sample_total}"
         )
-    print(f"총 검색 시간 합계: {total_elapsed:.2f}s")
+    print(f"BGE 검색 시간 합계: {total_bge_elapsed:.2f}s")
+    print(f"NLI 클러스터링 시간 합계: {total_nli_elapsed:.2f}s")
+    print(f"총 검색 시간 합계: {total_bge_elapsed + total_nli_elapsed:.2f}s")
 
 
 if __name__ == "__main__":
