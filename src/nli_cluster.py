@@ -222,7 +222,7 @@ def _nli_probs(
     with torch.no_grad():
         return model(**inputs).logits.softmax(dim=1)[0]
 
-
+@torch.no_grad()
 def build_relation_graph(
     sections: List[dict],
     *,
@@ -276,9 +276,8 @@ def build_relation_graph(
             max_length=max_length,
             padding=True,
         ).to(device)
-        with torch.no_grad():
-            probs1 = model(**inputs1).logits.softmax(dim=1)
-            probs2 = model(**inputs2).logits.softmax(dim=1)
+        probs1 = model(**inputs1).logits.softmax(dim=1)
+        probs2 = model(**inputs2).logits.softmax(dim=1)
         probs = (probs1 + probs2) / 2
         ents = probs[:, 2].cpu().tolist()
         contrs = probs[:, 0].cpu().tolist()

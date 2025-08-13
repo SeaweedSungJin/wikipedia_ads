@@ -25,18 +25,16 @@ from transformers import (
 )
 
 def load_jina_reranker(device: str | None = None):
-    """Load the Jina cross-modal reranker model."""
+    """Load the Jina cross-encoder reranker model."""
     global _RERANKER_MODEL
     if _RERANKER_MODEL is None:
-        print("텍스트 리랭커 모델 로딩중...")
-        # 1) device_map으로 바로 올리기
+        print("Jina reranker 모델 로딩중...")
         model = AutoModel.from_pretrained(
-            "jinaai/jina-reranker-m0",
-            torch_dtype="auto",
+            "jinaai/jina-reranker-m0-GGUF",
             trust_remote_code=True,
-            attn_implementation="flash_attention_2",
         )
-        model.to(device)
+        if device:
+            model.to(device)
         model.eval()
         _RERANKER_MODEL = model
 
@@ -92,12 +90,21 @@ def load_image_model(device_map="auto") -> Tuple[AutoModel, CLIPImageProcessor]:
     global _IMAGE_MODEL, _IMAGE_PROCESSOR
     if _IMAGE_MODEL is None or _IMAGE_PROCESSOR is None:
         print("이미지 모델 로딩중...")
+        """
         # Load the model in 8-bit mode to reduce memory usage
         quant_cfg = BitsAndBytesConfig(load_in_8bit=True)
         model = AutoModel.from_pretrained(
             "BAAI/EVA-CLIP-8B",
             trust_remote_code=True,
             quantization_config=quant_cfg,
+            low_cpu_mem_usage=True,
+            device_map=device_map,
+        )
+        """
+        model = AutoModel.from_pretrained(
+            "BAAI/EVA-CLIP-8B",
+            trust_remote_code=True,
+            torch_dtype=torch.float16,
             low_cpu_mem_usage=True,
             device_map=device_map,
         )

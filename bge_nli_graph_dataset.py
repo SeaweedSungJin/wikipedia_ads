@@ -58,7 +58,7 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
     total_nli_elapsed = 0.0
     sample_total = 0
 
-    k_values = [1, 3, 5, 10]
+    k_values = [1, 3, 5, 10, 20]
     img_doc_hits = {k: 0 for k in k_values}
     bge_doc_hits = {k: 0 for k in k_values}
     bge_sec_hits = {k: 0 for k in k_values}
@@ -71,9 +71,10 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
         cfg.image_path = sample.image_paths[0]
         cfg.text_query = sample.question
 
-        img_results, top_sections, _, bge_elapsed = search_rag_pipeline(
-            cfg, return_time=True, return_candidates=True
-        )
+        with torch.no_grad():
+            img_results, top_sections, _, bge_elapsed = search_rag_pipeline(
+                cfg, return_time=True, return_candidates=True
+            )
         total_bge_elapsed += bge_elapsed
         sample_total += 1
 

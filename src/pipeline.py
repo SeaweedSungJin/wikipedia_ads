@@ -63,6 +63,7 @@ def _get_image_offset(
         return -1
     return faiss_vidx - start_pos
 
+@torch.no_grad()
 def search_rag_pipeline(
     cfg: Config,
     text_encoder: TextEncoder | None = None,
@@ -285,12 +286,15 @@ def search_rag_pipeline(
             filtered_sections[i]["similarity"] = best_score
 
     if use_jina:
-        # Load the cross-encoder reranker on the target device
-        reranker = load_jina_reranker(device)
+        # Load the cross-encoder reranker on the specified device
+        jina_dev = (
+            f"cuda:{cfg.bge_device}" if isinstance(cfg.bge_device, int) else cfg.bge_device
+        )
+        if not torch.cuda.is_available() and isinstance(jina_dev, str) and "cuda" in jina_dev:
+            jina_dev = "cpu"
+        reranker = load_jina_reranker(jina_dev)
         # Prepare query/document pairs for cross-encoder scoring
-        jina_inputs = [
-            [cfg.text_query, s["section_text"]] for s in filtered_sections
-        ]
+        jina_inputs = [[cfg.text_query, s["section_text"]] for s in filtered_sections]
 
         with torch.no_grad():
             scores = reranker.compute_score(

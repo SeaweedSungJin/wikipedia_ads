@@ -8,6 +8,7 @@ import faiss
 import nltk
 import requests
 import torch
+from tqdm import tqdm
 from PIL import Image, UnidentifiedImageError
 
 # Simple User-Agent compliant with Wikimedia policy
@@ -70,7 +71,8 @@ def load_kb_list(json_path: str) -> List[dict]:
     print("지식베이스 JSON 로딩중...")
     kb_list = []
     with open(json_path, "r", encoding="utf-8") as f:
-        for line in f:
+        lines = f.readlines()
+        for line in tqdm(lines):
             line = line.strip()
             if line:
                 kb_list.append(json.loads(line))
