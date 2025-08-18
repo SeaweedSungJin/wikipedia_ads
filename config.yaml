@@ -11,15 +11,15 @@ tfidf_ratio: 0.5
 image_device: 0
 # Device placement
 bge_device: 1
-nli_device: 1
+nli_device: 2
 nli_batch_size: 32
 dataset_csv: /dataset/evqa/test.csv
 id2name_json: /dataset/inaturalist/train_id2name.json
 dataset_image_root: /dataset/inaturalist
 dataset_google_root: /dataset/landmarks
 
-dataset_start: 500
-dataset_end: 1000
+dataset_start: 0
+dataset_end: 10
 #dataset_start: 0
 #dataset_end: 4750
 
@@ -28,11 +28,10 @@ segment_level: section # "section", "paragraph" or "sentence"
 chunk_size: 1024
 #bge_model: BAAI/bge-reranker-v2-m3
 bge_model: BAAI/bge-reranker-large
+bge_max_length: 512 # ✅ 추가
 bge_conf_threshold: 0.3
-hyde_model: google/flan-t5-small
 nli_model: tasksource/deberta-base-long-nli
 #nli_model: MoritzLaurer/DeBERTa-v3-large-mnli-fever-anli-ling-wanli
-nli_threshold: 0.1 #cluster_sections에 쓰임. 단순 임계값과 너비우선탐색 방식에 쓰였음
 nli_max_length: 1024
 nli_max_cluster: 3
 nli_e_min: 0.4 #Entailment가 이거보다 낮음 탈락 

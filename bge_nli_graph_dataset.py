@@ -8,7 +8,10 @@ import torch
 from src.config import Config
 from src.dataloader import VQADataset
 from src.pipeline import search_rag_pipeline
+# Import NLI loader and clique-based section clustering helper.
 from src.nli_cluster import load_nli_model, cluster_sections_clique
+from src.models import load_vlm_model, generate_vlm_answer
+from src.eval import evaluate_example
 
 
 logging.basicConfig(level=logging.INFO)
@@ -46,8 +49,9 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
 
     device = _resolve(cfg.nli_device)
     model, tokenizer = load_nli_model(cfg.nli_model, device)
+    vlm_model, vlm_processor = load_vlm_model(device_map=cfg.bge_device)
     logger.info(
-        "NLI clustering mode: clique-weighted (ent-contr), nli_threshold is ignored; using e_min/margin/tau"
+        "NLI clustering mode: clique-weighted (ent-contr) using e_min/margin/tau"
     )
     print(
         "이미지 검색 모드:",
@@ -57,8 +61,12 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
     total_bge_elapsed = 0.0
     total_nli_elapsed = 0.0
     sample_total = 0
+    vlm_correct = 0
+    vlm_total = 0
 
-    k_values = [1, 3, 5, 10, 20]
+    max_k = getattr(cfg, "k_value", 10)
+    base_k = [1, 3, 5, 10]
+    k_values = sorted(set([k for k in base_k if k <= max_k] + [max_k]))
     img_doc_hits = {k: 0 for k in k_values}
     bge_doc_hits = {k: 0 for k in k_values}
     bge_sec_hits = {k: 0 for k in k_values}
@@ -71,19 +79,9 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
         cfg.image_path = sample.image_paths[0]
         cfg.text_query = sample.question
 
-        with torch.no_grad():
-            img_results, top_sections, _, bge_elapsed = search_rag_pipeline(
-                cfg, return_time=True, return_candidates=True
-            )
+        img_results, top_sections, _, bge_elapsed = search_rag_pipeline(cfg)
         total_bge_elapsed += bge_elapsed
         sample_total += 1
-
-        print(f"\n=== Row {sample.row_idx} ===")
-        print(f"질문: {sample.question}")
-        print("-- Top-k 문서 후보 (이미지 검색 기반) --")
-        for i, res in enumerate(img_results, 1):
-            title = res["doc"].get("title", "")
-            print(f"  {i}. {title}")
 
         gt_norm = normalize_title(sample.wikipedia_title)
         doc_rank = None
@@ -91,20 +89,11 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
             if normalize_title(res["doc"].get("title")) == gt_norm:
                 doc_rank = i
                 break
-        print(f"정답 문서: {sample.wikipedia_title} | rank: {doc_rank}")
         for k in k_values:
             if doc_rank is not None and doc_rank <= k:
                 img_doc_hits[k] += 1
 
         if top_sections:
-            print("-- BGE 섹션 점수 (Top-M) --")
-            for i, sec in enumerate(top_sections, 1):
-                stitle = sec.get("source_title", "")
-                sectitle = sec.get("section_title", "")
-                sidx = sec.get("section_idx")
-                score = sec.get("similarity", 0.0)
-                print(f"  {i}. {stitle} / {sectitle} (#{sidx}) score={score:.3f}")
-
             gt_idx_raw = sample.metadata.get("evidence_section_id")
             try:
                 gt_idx = int(gt_idx_raw) if gt_idx_raw is not None else None
@@ -123,7 +112,6 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
                     bge_sec_hits[k] += 1
 
             nli_start = time.time()
-            e_min = getattr(cfg, "nli_e_min", None) or getattr(cfg, "nli_threshold", 0.5)
             clusters, stats = cluster_sections_clique(
                 top_sections,
                 model=model,
@@ -132,36 +120,13 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
                 device=device,
                 max_cluster_size=cfg.nli_max_cluster,
                 lambda_score=cfg.nli_lambda,
-                e_min=e_min,
+                e_min=cfg.nli_e_min,
                 margin=cfg.nli_margin,
                 tau=cfg.nli_tau,
                 batch_size=cfg.nli_batch_size,
             )
             nli_elapsed = time.time() - nli_start
             total_nli_elapsed += nli_elapsed
-            print("-- NLI 관계 그래프 --")
-            print(
-                f"  entailment edges: {stats['entailment']}, "
-                f"neutral edges: {stats['neutral']}, contradictions: {stats['contradiction']}"
-            )
-
-            raw = stats.get("raw_cliques")
-            if raw:
-                raw = [[i + 1 for i in cl] for cl in raw]
-            print("Clusters (indices):", raw)
-            print("-- 최종 NLI 클러스터 (그래프 기반) --")
-            for c_idx, cl in enumerate(clusters, 1):
-                idx_disp = [i + 1 for i in cl["indices"]]
-                print(
-                    f"Cluster {c_idx} indices={idx_disp}: avg_score={cl['avg_score']:.3f}"
-                )
-                for sec in cl["sections"]:
-                    stitle = sec.get("source_title", "")
-                    sectitle = sec.get("section_title", "")
-                    sidx = sec.get("section_idx")
-                    score = sec.get("similarity", 0.0)
-                    print(f"    - {stitle} / {sectitle} (#{sidx}) score={score:.3f}")
-
             top_cluster = clusters[0]["sections"] if clusters else []
             doc_match = any(
                 sec.get("source_title") == sample.wikipedia_title for sec in top_cluster
@@ -171,12 +136,24 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
                 and sec.get("section_idx") == gt_idx
                 for sec in top_cluster
             )
-            print(
-                f"정답 문서: {sample.wikipedia_title} | 정답 섹션 idx: {gt_idx} | 정답: {sample.answer}"
-            )
-            print(
-                f"선택된 클러스터에 정답 문서 포함: {doc_match} | 정답 섹션 포함: {sec_match}"
-            )
+
+            # VLM inference using top cluster sections
+            sections_text = [sec.get("section_text", "") for sec in top_cluster]
+            if sections_text:
+                pred = generate_vlm_answer(
+                    vlm_model, vlm_processor, sample.question, cfg.image_path, sections_text
+                )
+                q_type = sample.metadata.get("question_type", "automatic")
+                correct = bool(
+                    evaluate_example(
+                        sample.question, [sample.answer], pred, q_type
+                    )
+                )
+                vlm_total += 1
+                vlm_correct += int(correct)
+                print(
+                    f"Row {sample.row_idx} | 정답: {sample.answer} | 예측: {pred} | 일치: {correct}"
+                )
 
             for k in k_values:
                 cl_subset = clusters[:k]
@@ -193,9 +170,7 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
             print("섹션 결과가 없습니다.")
             nli_elapsed = 0.0
 
-        print(f"BGE 검색 시간: {bge_elapsed:.2f}s")
-        print(f"NLI 클러스터링 시간: {nli_elapsed:.2f}s")
-        print(f"총 검색 시간: {bge_elapsed + nli_elapsed:.2f}s")
+        print(f"BGE 검색 시간: {bge_elapsed:.2f}s | NLI 시간: {nli_elapsed:.2f}s")
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
@@ -214,6 +189,8 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
     print(f"BGE 검색 시간 합계: {total_bge_elapsed:.2f}s")
     print(f"NLI 클러스터링 시간 합계: {total_nli_elapsed:.2f}s")
     print(f"총 검색 시간 합계: {total_bge_elapsed + total_nli_elapsed:.2f}s")
+    if vlm_total:
+        print(f"VLM 정답률: {vlm_correct}/{vlm_total}")
 
 
 if __name__ == "__main__":

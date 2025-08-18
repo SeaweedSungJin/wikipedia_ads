@@ -22,11 +22,10 @@ class Config:
     text_encoder_model: str = "facebook/contriever"  # HuggingFace model name
     segment_level: str = "section"  # "section", "paragraph" or "sentence"
     chunk_size: int = 1024  # Maximum characters per segment when splitting
+    bge_max_length: int = 512
     bge_model: str = "BAAI/bge-reranker-v2-m3"  # BGE reranker model name
-    hyde_model: str = "google/flan-t5-small"  # Model used for HyDE query generation
     bge_conf_threshold: float = 0.5  # Confidence threshold for BGE scores
     nli_model: str = "MoritzLaurer/DeBERTa-v3-base-mnli"  # NLI model for clustering
-    nli_threshold: float = 0.6  # LEGACY: threshold for BFS clustering (unused in clique mode)
     nli_max_length: int = 512  # Max tokens per NLI input pair
     nli_max_cluster: int = 3  # Max sections per NLI cluster
     nli_e_min: float = 0.5  # Entailment minimum for graph edges

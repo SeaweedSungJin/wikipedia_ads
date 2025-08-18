@@ -14,7 +14,7 @@ import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from .utils import download_nltk_data, load_image, load_faiss_and_ids, load_kb_list
-
+from tqdm import tqdm
 import torch
 
 from .config import Config
@@ -68,25 +68,11 @@ def search_rag_pipeline(
     cfg: Config,
     text_encoder: TextEncoder | None = None,
     segmenter: Segmenter | None = None,
-    return_time: bool = False,
-    return_candidates: bool = False,
     use_all_sections: bool = False,
-    image_only: bool = False,
-) -> (
-    List[dict]
-    | Tuple[List[dict], float]
-    | Tuple[List[dict], List[dict]]
-    | Tuple[List[dict], List[dict], float]
-    | Tuple[List[dict], List[dict], List[dict]]
-    | Tuple[List[dict], List[dict], List[dict], float]
-):
-    """Execute the RAG search pipeline and return image and section results.
+) -> Tuple[List[dict], List[dict], List[dict], float]:
+    """Execute the RAG search pipeline.
 
-    If ``image_only`` is True, only image search is performed and the function
-    returns the retrieved document list (and optionally the elapsed time). When
-    ``image_only`` is False, the pipeline proceeds to segment and rerank
-    sections as usual.  If ``return_time`` is True, the elapsed time (in
-    seconds) for the search after loading the knowledge base is also returned.
+    Returns a tuple of (image_results, top_sections, final_sections, elapsed_time).
     """
 
     # Ensure required NLTK data is present
@@ -194,16 +180,6 @@ def search_rag_pipeline(
     fused_embeddings = []
     filtered_sections: List[dict] = []  # ensure defined for all code paths
 
-    if image_only:
-        elapsed = time.time() - start_time
-        try:
-            torch.cuda.empty_cache()
-        except Exception:
-            pass
-        if return_time:
-            return top_k_image_results, elapsed
-        return top_k_image_results
-
     if use_contriever:
         if text_encoder is None:
             text_encoder = load_text_encoder(cfg.text_encoder_model, device_map="auto")
@@ -245,13 +221,7 @@ def search_rag_pipeline(
 
     if not all_sections_data:
         elapsed = time.time() - start_time
-        if return_time and return_candidates:
-            return top_k_image_results, [], [], elapsed
-        if return_time:
-            return top_k_image_results, [], elapsed
-        if return_candidates:
-            return top_k_image_results, [], []
-        return top_k_image_results, []
+        return top_k_image_results, [], [], elapsed
 
     # Optional TF-IDF filtering before expensive embedding comparison
     filtered_sections = all_sections_data
@@ -311,20 +281,39 @@ def search_rag_pipeline(
         if not torch.cuda.is_available() and isinstance(bge_dev, str) and "cuda" in bge_dev:
             bge_dev = "cpu"
         model, tokenizer = _get_bge(cfg.bge_model, bge_dev)
-        pairs = [[cfg.text_query, s["section_text"]] for s in filtered_sections]
-        inputs = tokenizer(
-            pairs,
-            padding=True,
-            truncation=True,
-            return_tensors="pt",
-            max_length=512,
-        )
-        inputs = {k: v.to(bge_dev) for k, v in inputs.items()}
-        with torch.no_grad():
-            scores = model(**inputs, return_dict=True).logits.view(-1).cpu().float()
-        for sec, score in zip(filtered_sections, scores.tolist()):
+        # 1. 미니배치 크기를 설정합니다. GPU 메모리에 맞춰 조절 가능합니다. (예: 16, 32, 64)
+        bge_batch_size = 32
+        all_scores = []
+        
+        # 처리할 섹션이 많을 때 사용자에게 진행 상황을 보여줍니다.
+        print(f"BGE Reranking {len(filtered_sections)} sections in batches of {bge_batch_size}...")
+
+        # 2. 전체 후보 섹션을 미니배치 크기만큼 나누어 순차적으로 처리합니다.
+        for i in tqdm(range(0, len(filtered_sections), bge_batch_size), desc="BGE Reranking"):
+            # 현재 처리할 미니배치 섹션을 가져옵니다.
+            batch_sections = filtered_sections[i:i + bge_batch_size]
+            pairs = [[cfg.text_query, s["section_text"]] for s in batch_sections]
+
+            if not pairs:
+                continue
+
+            inputs = tokenizer(
+                pairs,
+                padding=True,
+                truncation=True,
+                return_tensors="pt",
+                max_length=cfg.bge_max_length, # config.yaml에 추가한 bge_max_length 사용
+            ).to(bge_dev)
+
+            with torch.no_grad():
+                # 현재 미니배치의 점수만 계산합니다.
+                batch_scores = model(**inputs, return_dict=True).logits.view(-1).cpu().float()
+                # 계산된 점수를 전체 점수 리스트에 추가합니다.
+                all_scores.extend(batch_scores.tolist())
+        
+        # 3. 모든 미니배치 처리가 끝난 후, 계산된 점수들을 원래 섹션에 할당합니다.
+        for sec, score in zip(filtered_sections, all_scores):
             sec["similarity"] = float(score)
-            
     # Sort sections by similarity score
     sorted_sections = sorted(
         filtered_sections, key=lambda x: x.get("similarity", -1), reverse=True
@@ -361,10 +350,4 @@ def search_rag_pipeline(
     except Exception:
         pass
 
-    if return_time and return_candidates:
-        return top_k_image_results, top_m_sections, final_sections, elapsed
-    if return_time:
-        return top_k_image_results, final_sections, elapsed
-    if return_candidates:
-        return top_k_image_results, top_m_sections, final_sections
-    return top_k_image_results, final_sections
+    return top_k_image_results, top_m_sections, final_sections, elapsed

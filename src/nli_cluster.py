@@ -2,19 +2,23 @@ from __future__ import annotations
 
 """NLI-based clustering of BGE reranked sections.
 
-Two clustering strategies are provided:
-
-* ``cluster_sections`` – LEGACY BFS approach based on an entailment threshold.
-* ``cluster_sections_clique`` – current method constructing a weighted graph
-  using entailment/contradiction probabilities and ranking maximal cliques.
+The current approach constructs a weighted graph using entailment/contradiction
+probabilities and ranks maximal cliques.
 """
 
-from collections import deque
 from itertools import combinations
 from typing import List, Tuple, Set
 
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
+__all__ = [
+    "load_nli_model",
+    "nli_relation",
+    "build_relation_graph",
+    "maximal_cliques",
+    "cluster_sections_clique",
+]
 
 
 def load_nli_model(
@@ -27,141 +31,6 @@ def load_nli_model(
     model.to(device)
     model.eval()
     return model, tokenizer
-
-
-def entailment_score(
-    model,
-    tokenizer,
-    premise: str,
-    hypothesis: str,
-    device: torch.device | str = "cpu",
-    max_length: int = 512,
-) -> float:
-    """Return entailment probability for a premise/hypothesis pair."""
-    inputs = tokenizer(
-        premise,
-        hypothesis,
-        return_tensors="pt",
-        truncation=True,
-        max_length=max_length,
-    ).to(device)
-    with torch.no_grad():
-        logits = model(**inputs).logits.softmax(dim=1)[0]
-    # label order: contradiction, neutral, entailment
-    return float(logits[2].item())
-
-
-def pairwise_entailments(
-    sections: List[dict],
-    *,
-    model,
-    tokenizer,
-    threshold: float,
-    max_length: int,
-    device: torch.device | str,
-    batch_size: int,
-    ) -> List[List[int]]:
-    """LEGACY: Build adjacency lists of sections whose entailment exceeds ``threshold``.
-
-    This BFS/threshold-based clustering path is kept for backward compatibility and
-    is not used in the main pipeline.  Prefer :func:`cluster_sections_clique`.
-    """
-    n = len(sections)
-    adj = [[] for _ in range(n)]
-    texts = [s.get("section_text", "") for s in sections]
-    pairs = [(i, j) for i in range(n) for j in range(i + 1, n)]
-    for start in range(0, len(pairs), batch_size):
-        batch = pairs[start : start + batch_size]
-        premises = [texts[i] for i, _ in batch]
-        hypotheses = [texts[j] for _, j in batch]
-        inputs1 = tokenizer(
-            premises,
-            hypotheses,
-            return_tensors="pt",
-            truncation=True,
-            max_length=max_length,
-            padding=True,
-        ).to(device)
-        inputs2 = tokenizer(
-            hypotheses,
-            premises,
-            return_tensors="pt",
-            truncation=True,
-            max_length=max_length,
-            padding=True,
-        ).to(device)
-        with torch.no_grad():
-            probs1 = model(**inputs1).logits.softmax(dim=1)
-            probs2 = model(**inputs2).logits.softmax(dim=1)
-        ent = torch.max(probs1[:, 2], probs2[:, 2]).cpu().tolist()
-        for (i, j), score in zip(batch, ent):
-            if score >= threshold:
-                adj[i].append(j)
-                adj[j].append(i)
-    return adj
-
-
-def cluster_sections(
-    sections: List[dict],
-    *,
-    model,
-    tokenizer,
-    threshold: float = 0.6,
-    max_length: int = 512,
-    device: torch.device | str = "cpu",
-    max_cluster_size: int = 3,
-    batch_size: int = 32,
-) -> List[dict]:
-    """LEGACY: Cluster sections using a BFS on a thresholded entailment graph.
-
-    This path is no longer used in the main pipeline; it remains for older
-    experiments.  Returns clusters sorted by average BGE similarity, represented as
-    ``{"avg_score": float, "sections": List[dict], "indices": List[int]}``.
-    """
-    if not sections:
-        return []
-
-    adj = pairwise_entailments(
-        sections,
-        model=model,
-        tokenizer=tokenizer,
-        threshold=threshold,
-        max_length=max_length,
-        device=device,
-        batch_size=batch_size,
-    )
-
-    order = sorted(
-        range(len(sections)),
-        key=lambda i: sections[i].get("similarity", 0.0),
-        reverse=True,
-    )
-    visited = set()
-    clusters_idx: List[List[int]] = []
-
-    for idx in order:
-        if idx in visited:
-            continue
-        visited.add(idx)
-        cluster = [idx]
-        q = deque([idx])
-        while q and len(cluster) < max_cluster_size:
-            cur = q.popleft()
-            for nb in adj[cur]:
-                if nb not in visited and len(cluster) < max_cluster_size:
-                    visited.add(nb)
-                    cluster.append(nb)
-                    q.append(nb)
-        clusters_idx.append(cluster)
-
-    clusters: List[dict] = []
-    for cl in clusters_idx:
-        members = [sections[i] for i in cl]
-        avg_score = sum(m.get("similarity", 0.0) for m in members) / len(members)
-        clusters.append({"avg_score": avg_score, "sections": members, "indices": cl})
-
-    clusters.sort(key=lambda c: c["avg_score"], reverse=True)
-    return clusters
 
 
 # ---------------------------------------------------------------------------
@@ -221,6 +90,7 @@ def _nli_probs(
     ).to(device)
     with torch.no_grad():
         return model(**inputs).logits.softmax(dim=1)[0]
+
 
 @torch.no_grad()
 def build_relation_graph(
