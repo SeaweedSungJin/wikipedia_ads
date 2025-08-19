@@ -19,7 +19,7 @@ dataset_image_root: /dataset/inaturalist
 dataset_google_root: /dataset/landmarks
 
 dataset_start: 0
-dataset_end: 10
+dataset_end: 4750
 #dataset_start: 0
 #dataset_end: 4750
 

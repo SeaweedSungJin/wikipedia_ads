@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import inspect
 from typing import Tuple
 
 # Cached models and tokenizers.  These are initialised on first use so
@@ -178,13 +179,25 @@ def load_vlm_model(
             vision = getattr(model, "vision_tower", None)
 
         if vision is not None and hasattr(vision, "forward"):
-            orig_forward = vision.forward
+            # Some vision tower implementations accept an ``image_sizes`` argument
+            # while others do not.  Only strip this argument when the underlying
+            # ``forward`` signature does not define it *and* there is no catch-all
+            # ``**kwargs`` parameter.  This ensures models that accept arbitrary
+            # keyword arguments (and internally handle ``image_sizes``) continue
+            # to receive the image dimensions they need (e.g. LLaVA Next).
+            sig = inspect.signature(vision.forward)
+            accepts_kwargs = any(
+                p.kind == inspect.Parameter.VAR_KEYWORD
+                for p in sig.parameters.values()
+            )
+            if "image_sizes" not in sig.parameters and not accepts_kwargs:
+                orig_forward = vision.forward
 
-            def forward_without_image_sizes(*args, **kwargs):
-                kwargs.pop("image_sizes", None)
-                return orig_forward(*args, **kwargs)
+                def forward_without_image_sizes(*args, **kwargs):
+                    kwargs.pop("image_sizes", None)
+                    return orig_forward(*args, **kwargs)
 
-            vision.forward = forward_without_image_sizes
+                vision.forward = forward_without_image_sizes
 
         _VLM_MODEL, _VLM_PROCESSOR = model, processor
 
@@ -225,17 +238,22 @@ def generate_vlm_answer(
         )
     image = Image.open(image_path).convert("RGB")
     inputs = processor(images=image, text=prompt, return_tensors="pt")
-    # ``processor`` may return a five dimensional tensor of pixel values with a
-    # leading image batch dimension.  LLaVA's vision tower expects a 4D tensor
-    # (batch, channels, height, width) so squeeze out the redundant dimension
-    # for a single image, otherwise fail fast for unexpected shapes.
+    # ``processor`` may emit pixel values with separate batch and image
+    # dimensions.  Normalise this to a flat batch of 4D tensors so the vision
+    # tower receives the expected ``(batch, channels, height, width)`` layout.
     pixel_values = inputs.get("pixel_values")
     if pixel_values is not None:
-        # ``processor`` may emit a 5D tensor when the image has multiple
-        # frames (e.g. GIF).  In such cases use only the first frame to keep
-        # a single-image shape.  Fail fast on any other unexpected layout.
+        # ``processor`` may emit a 5D tensor with a leading batch dimension and
+        # an additional image dimension (e.g. dynamic high-resolution crops or
+        # multi-frame formats).  Collapse the first two dimensions so the vision
+        # tower receives a flat batch of images.  Fail fast on any other
+        # unexpected layout.
         if pixel_values.ndim == 5:
-            inputs["pixel_values"] = pixel_values[:, 0]
+            b, n, c, h, w = pixel_values.shape
+            inputs["pixel_values"] = pixel_values.view(b * n, c, h, w)
+            image_sizes = inputs.get("image_sizes")
+            if image_sizes is not None and hasattr(image_sizes, "view") and image_sizes.ndim == 3:
+                inputs["image_sizes"] = image_sizes.view(b * n, -1)
         elif pixel_values.ndim != 4:
             raise ValueError(f"Unexpected pixel_values shape {pixel_values.shape}")
     # Move tensor inputs to the VLM device but keep non-tensors (e.g. image_sizes)
