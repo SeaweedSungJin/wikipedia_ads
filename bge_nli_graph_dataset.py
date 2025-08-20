@@ -83,10 +83,34 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
         total_bge_elapsed += bge_elapsed
         sample_total += 1
 
-        gt_norm = normalize_title(sample.wikipedia_title)
+        # Ground-truth parsing for potential multi-hop questions
+        raw_titles = (
+            str(sample.wikipedia_title).split("|")
+            if sample.wikipedia_title
+            else []
+        )
+        gt_titles = [normalize_title(t) for t in raw_titles]
+        gt_title_set = set(gt_titles)
+
+        sec_ids_raw = sample.metadata.get("evidence_section_id")
+        raw_sections: list[str] = []
+        if isinstance(sec_ids_raw, str):
+            raw_sections = sec_ids_raw.split("|")
+        elif sec_ids_raw is not None:
+            raw_sections = [str(sec_ids_raw)]
+        gt_section_ids = []
+        for s in raw_sections:
+            try:
+                gt_section_ids.append(int(s))
+            except ValueError:
+                continue
+        gt_pairs = set(zip(gt_titles, gt_section_ids))
+
+        # Image search evaluation
         doc_rank = None
         for i, res in enumerate(img_results, 1):
-            if normalize_title(res["doc"].get("title")) == gt_norm:
+            title_norm = normalize_title(res["doc"].get("title"))
+            if title_norm in gt_title_set:
                 doc_rank = i
                 break
         for k in k_values:
@@ -94,19 +118,19 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
                 img_doc_hits[k] += 1
 
         if top_sections:
-            gt_idx_raw = sample.metadata.get("evidence_section_id")
-            try:
-                gt_idx = int(gt_idx_raw) if gt_idx_raw is not None else None
-            except (TypeError, ValueError):
-                gt_idx = None
-
             for k in k_values:
                 subset = top_sections[:k]
-                if any(sec.get("source_title") == sample.wikipedia_title for sec in subset):
+                if any(
+                    normalize_title(sec.get("source_title")) in gt_title_set
+                    for sec in subset
+                ):
                     bge_doc_hits[k] += 1
                 if any(
-                    sec.get("source_title") == sample.wikipedia_title
-                    and sec.get("section_idx") == gt_idx
+                    (
+                        normalize_title(sec.get("source_title")),
+                        sec.get("section_idx"),
+                    )
+                    in gt_pairs
                     for sec in subset
                 ):
                     bge_sec_hits[k] += 1
@@ -128,14 +152,6 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
             nli_elapsed = time.time() - nli_start
             total_nli_elapsed += nli_elapsed
             top_cluster = clusters[0]["sections"] if clusters else []
-            doc_match = any(
-                sec.get("source_title") == sample.wikipedia_title for sec in top_cluster
-            )
-            sec_match = any(
-                sec.get("source_title") == sample.wikipedia_title
-                and sec.get("section_idx") == gt_idx
-                for sec in top_cluster
-            )
 
             # VLM inference using top cluster sections
             sections_text = [sec.get("section_text", "") for sec in top_cluster]
@@ -158,11 +174,17 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
             for k in k_values:
                 cl_subset = clusters[:k]
                 secs = [s for cl in cl_subset for s in cl["sections"]]
-                if any(sec.get("source_title") == sample.wikipedia_title for sec in secs):
+                if any(
+                    normalize_title(sec.get("source_title")) in gt_title_set
+                    for sec in secs
+                ):
                     nli_doc_hits[k] += 1
                 if any(
-                    sec.get("source_title") == sample.wikipedia_title
-                    and sec.get("section_idx") == gt_idx
+                    (
+                        normalize_title(sec.get("source_title")),
+                        sec.get("section_idx"),
+                    )
+                    in gt_pairs
                     for sec in secs
                 ):
                     nli_sec_hits[k] += 1

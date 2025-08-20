@@ -161,7 +161,7 @@ def load_vlm_model(
                 torch_dtype=torch.float16,
                 device_map=device_map,
             )
-        processor = AutoProcessor.from_pretrained(model_name)
+        processor = AutoProcessor.from_pretrained(model_name, use_fast=True)
         model.eval()
 
         # ``llava-next`` expects ``image_sizes`` to compute the number of image
