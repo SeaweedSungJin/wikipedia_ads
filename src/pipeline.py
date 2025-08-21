@@ -13,7 +13,13 @@ import time
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-from .utils import download_nltk_data, load_image, load_faiss_and_ids, load_kb_list
+from .utils import (
+    download_nltk_data,
+    load_image,
+    load_faiss_and_ids,
+    load_kb_list,
+    normalize_title,
+)
 from tqdm import tqdm
 import torch
 
@@ -156,26 +162,32 @@ def search_rag_pipeline(
         if 0 <= doc_idx < len(kb_list):
             doc = kb_list[doc_idx]
 
-            title = doc.get("title", "")
+            title_norm = normalize_title(doc.get("title", ""))
             if any(
-                phrase in title.lower() for phrase in ["list of", "outline of", "index of"]
+                phrase in title_norm for phrase in ["list of", "outline of", "index of"]
             ):
                 continue
 
             offset = _get_image_offset(faiss_vidx, doc_idx, doc_idx_starts)
-            if offset != -1 and offset < len(doc.get("image_reference_descriptions", [])):
-                img_url = doc["image_urls"][offset]
-                top_k_image_results.append(
-                    {
-                        "doc": doc,
-                        "similarity": distances[0][i],
-                        "description": doc["image_reference_descriptions"][offset],
-                        "image_url": img_url,
-                    }
-                )
-                unique_doc_indices.add(doc_idx)
-                if doc_idx not in doc_image_map:
-                    doc_image_map[doc_idx] = img_url
+
+            img_urls = doc.get("image_urls", [])
+            img_url = img_urls[offset] if 0 <= offset < len(img_urls) else None
+            descriptions = doc.get("image_reference_descriptions", [])
+            description = (
+                descriptions[offset] if 0 <= offset < len(descriptions) else ""
+            )
+
+            top_k_image_results.append(
+                {
+                    "doc": doc,
+                    "similarity": distances[0][i],
+                    "description": description,
+                    "image_url": img_url,
+                }
+            )
+            unique_doc_indices.add(doc_idx)
+            if doc_idx not in doc_image_map:
+                doc_image_map[doc_idx] = img_url
 
     fused_embeddings = []
     filtered_sections: List[dict] = []  # ensure defined for all code paths

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 import logging
 import time
 import torch
@@ -12,22 +10,10 @@ from src.pipeline import search_rag_pipeline
 from src.nli_cluster import load_nli_model, cluster_sections_clique
 from src.models import load_vlm_model, generate_vlm_answer
 from src.eval import evaluate_example
-
+from src.utils import normalize_title, normalize_url_to_title
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-
-def normalize_title(title: Optional[str]) -> str:
-    if not isinstance(title, str):
-        return ""
-    import re
-    title = title.lower()
-    title = re.sub(r"\([^)]*\)", "", title)
-    title = re.sub(r"[^a-z0-9\s]", "", title)
-    title = re.sub(r"\s+", " ", title)
-    return title.strip()
-
 
 def run_bge_nli_graph_dataset(cfg: Config) -> None:
     dataset = VQADataset(
@@ -84,12 +70,12 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
         sample_total += 1
 
         # Ground-truth parsing for potential multi-hop questions
-        raw_titles = (
-            str(sample.wikipedia_title).split("|")
-            if sample.wikipedia_title
-            else []
-        )
-        gt_titles = [normalize_title(t) for t in raw_titles]
+        if sample.wikipedia_title:
+            raw_titles = str(sample.wikipedia_title).split("|")
+            gt_titles = [normalize_title(t) for t in raw_titles]
+        else:
+            raw_urls = str(sample.wikipedia_url).split("|") if sample.wikipedia_url else []
+            gt_titles = [normalize_url_to_title(u) for u in raw_urls]
         gt_title_set = set(gt_titles)
 
         sec_ids_raw = sample.metadata.get("evidence_section_id")

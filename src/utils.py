@@ -3,7 +3,9 @@ import json
 import os
 import pickle
 from io import BytesIO
-from typing import Iterable, List, Tuple
+from typing import Iterable, List, Tuple, Optional
+import re
+from urllib.parse import unquote
 import faiss
 import nltk
 import requests
@@ -67,3 +69,31 @@ def load_kb_list(json_path: str) -> List[dict]:
             if line:
                 kb_list.append(json.loads(line))
     return kb_list
+
+
+# ---------------------------------------------------------------------------
+# Normalisation helpers
+# ---------------------------------------------------------------------------
+
+
+def normalize_title(title: Optional[str]) -> str:
+    """Standardise a Wikipedia title for comparison."""
+    if not isinstance(title, str):
+        return ""
+    title = title.lower()
+    title = re.sub(r"\([^)]*\)", "", title)
+    title = re.sub(r"[^a-z0-9\s]", "", title)
+    title = re.sub(r"\s+", " ", title)
+    return title.strip()
+
+
+def normalize_url_to_title(url: Optional[str]) -> str:
+    """Extract and normalise a title from a Wikipedia URL."""
+    if not isinstance(url, str):
+        return ""
+    match = re.search(r"/wiki/([^#?]*)", url)
+    if not match:
+        return ""
+    slug = unquote(match.group(1))
+    slug = slug.replace("_", " ")
+    return normalize_title(slug)
