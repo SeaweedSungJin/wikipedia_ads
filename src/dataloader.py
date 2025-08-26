@@ -7,6 +7,30 @@ from typing import Dict, Iterator, List, Optional
 import csv
 import json
 import os
+import pickle
+
+IMAGE_EXTS = (
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".webp",
+    ".JPG",
+    ".JPEG",
+    ".PNG",
+    ".WEBP",
+)
+
+INAT_SUBDIRS = [
+    "public_test",
+    "test",
+    "train",
+    "val",
+    "public_test/images",
+    "test/images",
+    "train/images",
+    "val/images",
+    "",
+]
 
 
 @dataclass
@@ -36,7 +60,7 @@ class VQADataset:
     def __init__(
         self,
         csv_path: str,
-        id2name_path: Optional[str],
+        id2name_path: Optional[str | List[str]],
         image_root: Optional[str],
         googlelandmark_root: Optional[str] = None,
         start: int = 0,
@@ -49,12 +73,45 @@ class VQADataset:
         self.image_root = image_root  # Inaturalist image root
         self.googlelandmark_root = googlelandmark_root  # Google Landmark image root
 
-        # Mapping from numeric ID to image filename
-        self.id2name = {}
+        # Mapping from numeric ID to image filename.  Accept either a single
+        # JSON file or a list of files to merge, mirroring the behaviour of
+        # ``evaluate_pipeline.py``.
+        self.id2name: Dict[str, str] = {}
         if id2name_path:
-            print("id2name JSON 로딩중...")
-            with open(id2name_path, "r", encoding="utf-8") as f:
-                self.id2name = json.load(f)
+            paths = (
+                id2name_path
+                if isinstance(id2name_path, (list, tuple))
+                else [id2name_path]
+            )
+            for path in paths:
+                if path and os.path.exists(path):
+                    try:
+                        with open(path, "r", encoding="utf-8") as f:
+                            data = json.load(f)
+                        data = {str(k): v for k, v in data.items()}
+                        self.id2name.update(data)
+                        print(f"[INFO] Loaded id2name: {path} (+{len(data):,})")
+                    except Exception as e:
+                        print(f"[WARN] id2name 로딩 실패({path}): {e}")
+
+        # Pre-load or build an iNaturalist ID→path cache for robust lookups
+        self._inat_cache: Dict[str, str] = {}
+        if self.image_root and os.path.exists(self.image_root):
+            cache_path = os.path.join(self.image_root, "_id_to_path_cache.pkl")
+            if os.path.exists(cache_path):
+                try:
+                    with open(cache_path, "rb") as f:
+                        self._inat_cache = pickle.load(f)
+                    print(
+                        f"[INFO] Loaded iNat ID cache: {len(self._inat_cache):,} entries from {cache_path}"
+                    )
+                except Exception as e:
+                    print(f"[WARN] iNat cache 로딩 실패({cache_path}): {e}")
+            else:
+                try:
+                    self._inat_cache = self._build_inat_cache(self.image_root, cache_path)
+                except Exception as e:
+                    print(f"[WARN] iNat cache 생성 실패: {e}")
 
         self.start = start  # Starting row index
         self.end = end  # Optional stopping row index
@@ -69,67 +126,112 @@ class VQADataset:
     def __len__(self):
          return self.end - self.start if self.end is not None else self.total_rows - self.start
 
+    # ------------------------------------------------------------------
+    # Image path resolution helpers
+    # ------------------------------------------------------------------
+
+    def _build_inat_cache(
+        self, base_dir: str, cache_path: str, max_files: int = 10_000_000
+    ) -> Dict[str, str]:
+        """Scan the iNaturalist directory and build an ID→path cache."""
+
+        print(f"[INFO] Building iNat ID cache from: {base_dir}")
+        id2path: Dict[str, str] = {}
+        visited = 0
+        for root, _, files in os.walk(base_dir):
+            for fn in files:
+                visited += 1
+                if visited % 200000 == 0:
+                    print(
+                        f"[INFO] scanned {visited:,} files... cache size={len(id2path):,}"
+                    )
+                if visited > max_files:
+                    print("[WARN] Reached max_files limit during scan.")
+                    break
+                name, ext = os.path.splitext(fn)
+                if ext in IMAGE_EXTS and name.isdigit():
+                    id2path[name] = os.path.join(root, fn)
+            else:
+                continue
+            break
+
+        with open(cache_path, "wb") as f:
+            pickle.dump(id2path, f)
+        print(
+            f"[INFO] iNat cache built. entries={len(id2path):,} -> {cache_path}"
+        )
+        return id2path
+
     def _get_image_path(self, dataset_name: str, image_id: str) -> Optional[str]:
         """Resolve an image path based on dataset name and ID."""
 
-        if dataset_name == "inaturalist":
+        ds = str(dataset_name).strip().lower()
+        sid = str(image_id).strip()
+
+        if ds.startswith("inat"):
             if not self.image_root:
                 return None
-            name = self.id2name.get(str(image_id))
+            name = self.id2name.get(sid)
             if name:
-                path = os.path.join(self.image_root, name)
-                if os.path.exists(path):
-                    return path
+                cand = os.path.join(self.image_root, name)
+                if os.path.exists(cand):
+                    return cand
+                for ext in IMAGE_EXTS:
+                    cand2 = os.path.join(self.image_root, name + ext)
+                    if os.path.exists(cand2):
+                        return cand2
 
-            # In test splits the mapping may be unavailable. Try common
-            # fallback patterns such as ``<root>/<id>.jpg`` or searching
-            # under train/val/test subfolders.
-            candidate = os.path.join(self.image_root, f"{image_id}.jpg")
-            if os.path.exists(candidate):
-                return candidate
-            for split in ("train", "val", "test"):
-                candidate = os.path.join(self.image_root, split, f"{image_id}.jpg")
-                if os.path.exists(candidate):
-                    return candidate
-            # If the ID itself looks like a relative path, use it directly
-            candidate = os.path.join(self.image_root, str(image_id))
-            if os.path.exists(candidate):
-                return candidate
-        elif dataset_name.lower() in ("googlelandmarks", "googlelandmark", "landmarks"):
-            # Accept several naming conventions for Google Landmark
-            # to match variations in the CSV.
+            p = self._inat_cache.get(sid)
+            if p and os.path.exists(p):
+                return p
+
+            for sd in INAT_SUBDIRS:
+                base = os.path.join(self.image_root, sd) if sd else self.image_root
+                for ext in IMAGE_EXTS:
+                    cand = os.path.join(base, f"{sid}{ext}")
+                    if os.path.exists(cand):
+                        return cand
+            return None
+
+        if ds in {
+            "landmarks",
+            "googlelandmarks",
+            "googlelandmark",
+            "google_landmarks",
+            "google-landmarks",
+            "glr",
+            "glr-v2",
+            "landmarks-v2",
+        }:
             if not self.googlelandmark_root:
                 return None
-            image_id_str = str(image_id)
-            if len(image_id_str) < 3:
+            if len(sid) < 3:
                 return None
-
-            # Google Landmark images are stored under split folders (train/index/test)
-            # followed by three nested directories derived from the image id digits.
-            for split in ("train", "index", "test"):
-                for ext in (".jpg", ".jpeg", ".JPG", ".JPEG"):
-                    candidate = os.path.join(
+            c0, c1, c2 = sid[0], sid[1], sid[2]
+            for split in ("train", "test", "val", "index"):
+                for ext in IMAGE_EXTS:
+                    p1 = os.path.join(
+                        self.googlelandmark_root, split, c0, c1, c2, f"{sid}{ext}"
+                    )
+                    if os.path.exists(p1):
+                        return p1
+                    p2 = os.path.join(
                         self.googlelandmark_root,
                         split,
-                        image_id_str[0],
-                        image_id_str[1],
-                        image_id_str[2],
-                        f"{image_id_str}{ext}",
+                        "images",
+                        c0,
+                        c1,
+                        c2,
+                        f"{sid}{ext}",
                     )
-                    if os.path.exists(candidate):
-                        return candidate
+                    if os.path.exists(p2):
+                        return p2
+            for ext in IMAGE_EXTS:
+                p = os.path.join(self.googlelandmark_root, c0, c1, c2, f"{sid}{ext}")
+                if os.path.exists(p):
+                    return p
+            return None
 
-            # Fallback: some datasets omit the split folder entirely
-            for ext in (".jpg", ".jpeg", ".JPG", ".JPEG"):
-                candidate = os.path.join(
-                    self.googlelandmark_root,
-                    image_id_str[0],
-                    image_id_str[1],
-                    image_id_str[2],
-                    f"{image_id_str}{ext}",
-                )
-                if os.path.exists(candidate):
-                    return candidate
         return None
 
 
@@ -137,8 +239,15 @@ class VQADataset:
         """Convert image IDs to full file paths."""
 
         paths: List[str] = []
+        ds = str(dataset_name).strip().lower()
         for id_ in ids:
-            p = self._get_image_path(dataset_name, id_)
+            p = self._get_image_path(ds, id_)
+            if not p:
+                # Try both datasets if name was ambiguous or lookup failed
+                if not ds.startswith("inat"):
+                    p = self._get_image_path("inaturalist", id_)
+                if not p:
+                    p = self._get_image_path("landmarks", id_)
             if p and os.path.exists(p):
                 paths.append(p)
         return paths

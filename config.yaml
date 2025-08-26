@@ -1,6 +1,6 @@
 base_path: /dataset/evqa
 image_path: datasets/real_images/Downside_Abbey.jpg
-kb_json_name: encyclopedic_kb_wiki_aug.jsonl
+kb_json_name: encyclopedic_kb_wiki.json
 text_query: Who built the choir at this abbey?
 k_value: 10
 m_value: 10
@@ -19,7 +19,7 @@ dataset_image_root: /dataset/inaturalist
 dataset_google_root: /dataset/landmarks
 
 dataset_start: 0
-dataset_end: 4750
+dataset_end: 5750
 #dataset_start: 0
 #dataset_end: 4750
 

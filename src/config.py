@@ -1,5 +1,6 @@
 """Configuration utilities loaded from a simple YAML file."""
 from dataclasses import dataclass, field
+from typing import List
 import os
 
 
@@ -10,7 +11,7 @@ class Config:
     # Paths
     base_path: str  # Folder containing the knowledge base files
     image_path: str  # Query image path or URL
-    kb_json_name: str  # Name of the KB JSONL file
+    kb_json_name: str  # Name of the KB JSON file
 
     # Search parameters
     text_query: str  # Text question for retrieval
@@ -44,7 +45,7 @@ class Config:
 
     # Dataset evaluation options
     dataset_csv: str | None = None  # Path to EVQA CSV file
-    id2name_json: str | None = None  # Mapping from image ID to name
+    id2name_json: str | List[str] | None = None  # Mapping from image ID to name
     dataset_image_root: str | None = None  # Root directory for inaturalist images
     dataset_google_root: str | None = None  # Root directory for googlelandmark images
     dataset_start: int = 0  # Optional start offset

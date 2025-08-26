@@ -16,8 +16,9 @@ This project implements a retrieval‑augmented pipeline to answer visual questi
 - **config.yaml** – paths, model options, search parameters, and thresholds such as the BGE confidence, NLI edge gating parameters (`nli_e_min`, `nli_margin`, `nli_tau`), blend weight `nli_lambda`, max length, and cluster size. The `k_value` field sets how many image candidates are retrieved; evaluation reports Recall@1/3/5/10 and, if larger, Recall@`k_value` as well (ensure `m_value` ≥ `k_value`).
   Device placement can be tuned per module via `image_device`, `bge_device`, and `nli_device`, and pairwise NLI scoring uses `nli_batch_size` to control batching.
 - **bge_nli_graph_dataset.py** – processes a dataset slice using weighted graph-based NLI clustering. After ranking, the top cluster is passed to LLaVA for answer generation and evaluated with `evaluate_example`. Summary includes Recall@1/3/5/10 and VLM accuracy.
- - **src/config.py** – dataclasses for configuration and a YAML loader that drops unknown keys.
- - **src/pipeline.py** – orchestrates image search, section generation, reranking, and entropy‑based confidence filtering.
+- **image_search_dataset.py** – measures image-only retrieval performance on the dataset and reports Recall@K without running rerankers, NLI, or VLM steps.
+- **src/config.py** – dataclasses for configuration and a YAML loader that drops unknown keys.
+- **src/pipeline.py** – orchestrates image search, section generation, reranking, and entropy‑based confidence filtering.
 - **src/encoders.py** – wrappers around Contriever, Jina M0, and BGE scoring models.
 - **src/models.py** – utilities for loading image/text models and computing embeddings.
 - **src/dataloader.py** – reads the EVQA CSV and yields question–image samples with metadata.
