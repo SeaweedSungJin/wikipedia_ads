@@ -115,7 +115,7 @@ def search_rag_pipeline(
     start_time = time.time()
 
     # Build a lookup table so we can convert a FAISS index position back
-    # into a per-document offset later when scoring sections.    
+    # into a per-document offset later when scoring sections.
     doc_idx_starts = {}
     for i, doc_idx in enumerate(kb_ids):
         if doc_idx not in doc_idx_starts:
@@ -124,67 +124,53 @@ def search_rag_pipeline(
     # Encode the query image and search the FAISS index
     img = load_image(cfg.image_path)
     img_emb_np = encode_image(img, image_model, image_processor).numpy()
-    # Optionally build a lookup of the first image index for each document
-    doc_to_first_faiss_idx: Dict[int, int] = {}
-    if cfg.first_image_only:
-        for i, d_idx in enumerate(kb_ids):
-            if d_idx not in doc_to_first_faiss_idx:
-                doc_to_first_faiss_idx[d_idx] = i
 
     # Retrieve more candidates than needed so that filtered pages
     # (e.g., "list of" or "outline of" entries) can be skipped
     search_k = min(cfg.k_value * 20, faiss_index.ntotal)
     distances, indices = faiss_index.search(img_emb_np, k=search_k)
 
-    # Collect top-K image search results
+    # Collect top-K image search results using the evaluate_pipeline logic
     top_k_image_results: List[dict] = []
     unique_doc_indices = set()
-    doc_image_map: Dict[int, str] = {}
 
     limit = indices.shape[1]
     for i in range(limit):
         if len(unique_doc_indices) >= cfg.k_value:
             break
-        faiss_vidx = indices[0][i]
-        doc_idx = kb_ids[faiss_vidx]
+        faiss_vidx = int(indices[0][i])
+        doc_idx = int(kb_ids[faiss_vidx])
 
         if doc_idx in unique_doc_indices:
             continue
 
-        if cfg.first_image_only:
-            first_idx = doc_to_first_faiss_idx.get(doc_idx)
-            if first_idx is None or first_idx != faiss_vidx:
-                continue
+        if not (0 <= doc_idx < len(kb_list)):
+            continue
 
-        if 0 <= doc_idx < len(kb_list):
-            doc = kb_list[doc_idx]
+        doc = kb_list[doc_idx]
+        title_norm = normalize_title(doc.get("title", ""))
+        if any(
+            phrase in title_norm for phrase in ["list of", "outline of", "index of"]
+        ):
+            continue
 
-            title_norm = normalize_title(doc.get("title", ""))
-            if any(
-                phrase in title_norm for phrase in ["list of", "outline of", "index of"]
-            ):
-                continue
+        offset = _get_image_offset(faiss_vidx, doc_idx, doc_idx_starts)
+        img_urls = doc.get("image_urls", [])
+        img_url = img_urls[offset] if 0 <= offset < len(img_urls) else None
+        descriptions = doc.get("image_reference_descriptions", [])
+        description = (
+            descriptions[offset] if 0 <= offset < len(descriptions) else ""
+        )
 
-            offset = _get_image_offset(faiss_vidx, doc_idx, doc_idx_starts)
-
-            img_urls = doc.get("image_urls", [])
-            img_url = img_urls[offset] if 0 <= offset < len(img_urls) else None
-            descriptions = doc.get("image_reference_descriptions", [])
-            description = (
-                descriptions[offset] if 0 <= offset < len(descriptions) else ""
-            )
-
-            top_k_image_results.append(
-                {
-                    "doc": doc,
-                    "similarity": distances[0][i],
-                    "description": description,
-                    "image_url": img_url,
-                }
-            )
-            unique_doc_indices.add(doc_idx)
-            if doc_idx not in doc_image_map:
-                doc_image_map[doc_idx] = img_url
+        top_k_image_results.append(
+            {
+                "doc": doc,
+                "similarity": float(distances[0][i]),
+                "description": description,
+                "image_url": img_url,
+            }
+        )
+        unique_doc_indices.add(doc_idx)
 
     fused_embeddings = []
     filtered_sections: List[dict] = []  # ensure defined for all code paths
@@ -220,10 +206,7 @@ def search_rag_pipeline(
     unique_docs = [(i, kb_list[i]) for i in unique_doc_indices]
     for doc_idx, doc in unique_docs:
         segments = segmenter.get_segments(doc)
-        img_url = doc_image_map.get(
-            doc_idx,
-            doc.get("image_urls", [None])[0] if doc.get("image_urls") else None,
-        )
+        img_url = doc.get("image_urls", [None])[0] if doc.get("image_urls") else None
         for seg in segments:
             seg["image_url"] = img_url
         all_sections_data.extend(segments)
