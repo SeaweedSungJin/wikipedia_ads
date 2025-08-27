@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 def run_image_search_dataset(cfg: Config) -> None:
     dataset = VQADataset(
         csv_path=cfg.dataset_csv,
-        id2name_path=cfg.id2name_json,
+        id2name_paths=cfg.id2name_paths,
         image_root=cfg.dataset_image_root,
         googlelandmark_root=cfg.dataset_google_root,
         start=cfg.dataset_start,
@@ -113,6 +113,6 @@ def run_image_search_dataset(cfg: Config) -> None:
 
 if __name__ == "__main__":
     cfg = Config.from_yaml("config.yaml")
-    if not cfg.dataset_csv or not cfg.id2name_json:
-        raise ValueError("dataset_csv and id2name_json must be set in config")
+    if not cfg.dataset_csv or not cfg.id2name_paths:
+        raise ValueError("dataset_csv and id2name_paths must be set in config")
     run_image_search_dataset(cfg)

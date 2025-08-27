@@ -20,19 +20,6 @@ IMAGE_EXTS = (
     ".WEBP",
 )
 
-INAT_SUBDIRS = [
-    "public_test",
-    "test",
-    "train",
-    "val",
-    "public_test/images",
-    "test/images",
-    "train/images",
-    "val/images",
-    "",
-]
-
-
 @dataclass
 class VQASample:
     """Single question-answer-image entry."""
@@ -60,7 +47,7 @@ class VQADataset:
     def __init__(
         self,
         csv_path: str,
-        id2name_path: Optional[str | List[str]],
+        id2name_paths: Optional[List[str]],
         image_root: Optional[str],
         googlelandmark_root: Optional[str] = None,
         start: int = 0,
@@ -73,26 +60,11 @@ class VQADataset:
         self.image_root = image_root  # Inaturalist image root
         self.googlelandmark_root = googlelandmark_root  # Google Landmark image root
 
-        # Mapping from numeric ID to image filename.  Accept either a single
-        # JSON file or a list of files to merge, mirroring the behaviour of
-        # ``evaluate_pipeline.py``.
+        # Mapping from numeric ID to image filename. Merge multiple JSON files
+        # if provided to increase robustness across datasets.
         self.id2name: Dict[str, str] = {}
-        if id2name_path:
-            paths = (
-                id2name_path
-                if isinstance(id2name_path, (list, tuple))
-                else [id2name_path]
-            )
-            for path in paths:
-                if path and os.path.exists(path):
-                    try:
-                        with open(path, "r", encoding="utf-8") as f:
-                            data = json.load(f)
-                        data = {str(k): v for k, v in data.items()}
-                        self.id2name.update(data)
-                        print(f"[INFO] Loaded id2name: {path} (+{len(data):,})")
-                    except Exception as e:
-                        print(f"[WARN] id2name 로딩 실패({path}): {e}")
+        if id2name_paths:
+            self.id2name = self._load_id2name(id2name_paths)
 
         # Pre-load or build an iNaturalist ID→path cache for robust lookups
         self._inat_cache: Dict[str, str] = {}
@@ -124,8 +96,23 @@ class VQADataset:
         )
     
     def __len__(self):
-         return self.end - self.start if self.end is not None else self.total_rows - self.start
+        return self.end - self.start if self.end is not None else self.total_rows - self.start
 
+    def _load_id2name(self, paths: List[str]) -> Dict[str, str]:
+        """Load and merge multiple id→filename mappings from JSON files."""
+
+        merged: Dict[str, str] = {}
+        for path in paths:
+            if path and os.path.exists(path):
+                try:
+                    with open(path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    data = {str(k): v for k, v in data.items()}
+                    merged.update(data)
+                    print(f"[INFO] Loaded id2name: {path} (+{len(data):,})")
+                except Exception as e:
+                    print(f"[WARN] id2name 로딩 실패({path}): {e}")
+        return merged
     # ------------------------------------------------------------------
     # Image path resolution helpers
     # ------------------------------------------------------------------
@@ -163,7 +150,12 @@ class VQADataset:
         return id2path
 
     def _get_image_path(self, dataset_name: str, image_id: str) -> Optional[str]:
-        """Resolve an image path based on dataset name and ID."""
+        """Wrapper for legacy calls to :func:`resolve_image_path`."""
+
+        return self.resolve_image_path(dataset_name, image_id)
+
+    def resolve_image_path(self, dataset_name: str, image_id: str) -> Optional[str]:
+        """Resolve an image path with dataset-specific fallback logic."""
 
         ds = str(dataset_name).strip().lower()
         sid = str(image_id).strip()
@@ -171,6 +163,8 @@ class VQADataset:
         if ds.startswith("inat"):
             if not self.image_root:
                 return None
+
+            # 1) direct lookup from merged id2name mapping
             name = self.id2name.get(sid)
             if name:
                 cand = os.path.join(self.image_root, name)
@@ -181,11 +175,13 @@ class VQADataset:
                     if os.path.exists(cand2):
                         return cand2
 
+            # 2) cached path from prebuilt scan
             p = self._inat_cache.get(sid)
             if p and os.path.exists(p):
                 return p
 
-            for sd in INAT_SUBDIRS:
+            # 3) fallback search across common subdirectories
+            for sd in ["train", "val", "test", "public_test", ""]:
                 base = os.path.join(self.image_root, sd) if sd else self.image_root
                 for ext in IMAGE_EXTS:
                     cand = os.path.join(base, f"{sid}{ext}")
@@ -208,28 +204,13 @@ class VQADataset:
             if len(sid) < 3:
                 return None
             c0, c1, c2 = sid[0], sid[1], sid[2]
-            for split in ("train", "test", "val", "index"):
+            for split in ["train", "test", "index"]:
                 for ext in IMAGE_EXTS:
-                    p1 = os.path.join(
+                    cand = os.path.join(
                         self.googlelandmark_root, split, c0, c1, c2, f"{sid}{ext}"
                     )
-                    if os.path.exists(p1):
-                        return p1
-                    p2 = os.path.join(
-                        self.googlelandmark_root,
-                        split,
-                        "images",
-                        c0,
-                        c1,
-                        c2,
-                        f"{sid}{ext}",
-                    )
-                    if os.path.exists(p2):
-                        return p2
-            for ext in IMAGE_EXTS:
-                p = os.path.join(self.googlelandmark_root, c0, c1, c2, f"{sid}{ext}")
-                if os.path.exists(p):
-                    return p
+                    if os.path.exists(cand):
+                        return cand
             return None
 
         return None

@@ -45,7 +45,7 @@ class Config:
 
     # Dataset evaluation options
     dataset_csv: str | None = None  # Path to EVQA CSV file
-    id2name_json: str | List[str] | None = None  # Mapping from image ID to name
+    id2name_paths: List[str] | None = None  # Mapping from image ID to name files
     dataset_image_root: str | None = None  # Root directory for inaturalist images
     dataset_google_root: str | None = None  # Root directory for googlelandmark images
     dataset_start: int = 0  # Optional start offset
@@ -74,6 +74,14 @@ class Config:
         # Support legacy field name `googlelandmark_root`
         if "googlelandmark_root" in data and "dataset_google_root" not in data:
             data["dataset_google_root"] = data.pop("googlelandmark_root")
+            
+        # Backwards compatibility for previous `id2name_json` field
+        if "id2name_json" in data and "id2name_paths" not in data:
+            value = data.pop("id2name_json")
+            if isinstance(value, str):
+                data["id2name_paths"] = [value]
+            else:
+                data["id2name_paths"] = value
 
         if "rerankers" not in data:
             data["rerankers"] = {}
