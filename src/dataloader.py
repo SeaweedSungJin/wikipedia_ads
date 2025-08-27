@@ -273,7 +273,6 @@ class VQADataset:
         # Convert each element to string for downstream lookup
         return [str(i) for i in values]
 
-
     def __iter__(self) -> Iterator[VQASample]:
         """Iterate over VQA samples as :class:`VQASample` objects."""
 

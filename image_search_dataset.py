@@ -55,7 +55,11 @@ def run_image_search_dataset(cfg: Config) -> None:
     for sample in dataset:
         if not sample.image_paths:
             continue
-        img = load_image(sample.image_paths[0])
+        try:
+            img = load_image(sample.image_paths[0])
+        except Exception as e:
+            print(f"[Row {sample.row_idx}] 이미지 로딩 실패: {e}")
+            continue
         img_emb = encode_image(img, image_model, image_processor).numpy()
         distances, indices = faiss_index.search(img_emb, search_k)
 

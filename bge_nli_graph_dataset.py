@@ -12,8 +12,10 @@ from src.models import load_vlm_model, generate_vlm_answer
 from src.eval import evaluate_example
 from src.utils import normalize_title, normalize_url_to_title
 
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 
 def run_bge_nli_graph_dataset(cfg: Config) -> None:
     dataset = VQADataset(
@@ -65,7 +67,11 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
         cfg.image_path = sample.image_paths[0]
         cfg.text_query = sample.question
 
-        img_results, top_sections, _, bge_elapsed = search_rag_pipeline(cfg)
+        try:
+            img_results, top_sections, _, bge_elapsed = search_rag_pipeline(cfg)
+        except Exception as e:
+            print(f"[Row {sample.row_idx}] 이미지 검색 실패: {e}")
+            continue
         total_bge_elapsed += bge_elapsed
         sample_total += 1
 

@@ -38,9 +38,13 @@ def run_vlm_only_dataset(cfg: Config) -> None:
         if not sample.image_paths:
             continue
         image_path = sample.image_paths[0]
-        pred = generate_vlm_answer(
-            vlm_model, vlm_processor, sample.question, image_path, []
-        )
+        try:
+            pred = generate_vlm_answer(
+                vlm_model, vlm_processor, sample.question, image_path, []
+            )
+        except Exception as e:
+            print(f"[Row {sample.row_idx}] VLM 처리 실패: {e}")
+            continue
         q_type = sample.metadata.get("question_type", "automatic")
         match = bool(
             evaluate_example(sample.question, [sample.answer], pred, q_type)
