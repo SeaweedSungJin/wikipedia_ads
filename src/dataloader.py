@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Iterator, List, Optional
+from typing import Dict, Iterator, Optional
 
-import csv
+import pandas as pd
 import json
 import os
 import pickle
@@ -29,7 +29,7 @@ class VQASample:
     answer: str  # Corresponding answer string
 
     # Resolved image paths associated with the question
-    image_paths: List[str]
+    image_paths: list[str]
 
     # Metadata used for bookkeeping and analysis
     row_idx: int
@@ -47,7 +47,7 @@ class VQADataset:
     def __init__(
         self,
         csv_path: str,
-        id2name_paths: Optional[List[str]],
+        id2name_paths: Optional[list[str]],
         image_root: Optional[str],
         googlelandmark_root: Optional[str] = None,
         start: int = 0,
@@ -88,9 +88,12 @@ class VQADataset:
         self.start = start  # Starting row index
         self.end = end  # Optional stopping row index
 
-        # Compute dataset length for debugging
-        with open(csv_path, newline="", encoding="utf-8") as f:
-            self.total_rows = sum(1 for _ in f) - 1
+        # Load the CSV once with pandas so we can iterate reliably even when
+        # numeric IDs appear in the ``dataset_image_ids`` column.  We force that
+        # column to ``str`` so values like ``12345`` are preserved without being
+        # converted to floats.
+        self.df = pd.read_csv(csv_path, dtype={"dataset_image_ids": str})
+        self.total_rows = len(self.df)
         print(
             f"CSV 파일 '{csv_path}' 로딩 완료. 총 {self.total_rows}개 행 (헤더 제외). 시작={start}, 끝={end}"
         )
@@ -98,7 +101,7 @@ class VQADataset:
     def __len__(self):
         return self.end - self.start if self.end is not None else self.total_rows - self.start
 
-    def _load_id2name(self, paths: List[str]) -> Dict[str, str]:
+    def _load_id2name(self, paths: list[str]) -> Dict[str, str]:
         """Load and merge multiple id→filename mappings from JSON files."""
 
         merged: Dict[str, str] = {}
@@ -113,6 +116,7 @@ class VQADataset:
                 except Exception as e:
                     print(f"[WARN] id2name 로딩 실패({path}): {e}")
         return merged
+
     # ------------------------------------------------------------------
     # Image path resolution helpers
     # ------------------------------------------------------------------
@@ -216,10 +220,10 @@ class VQADataset:
         return None
 
 
-    def _resolve_paths(self, dataset_name: str, ids: List[str]) -> List[str]:
+    def _resolve_paths(self, dataset_name: str, ids: list[str]) -> list[str]:
         """Convert image IDs to full file paths."""
 
-        paths: List[str] = []
+        paths: list[str] = []
         ds = str(dataset_name).strip().lower()
         for id_ in ids:
             p = self._get_image_path(ds, id_)
@@ -232,57 +236,43 @@ class VQADataset:
             if p and os.path.exists(p):
                 paths.append(p)
         return paths
-
-    def _parse_ids(self, field: str) -> List[str]:
+    
+    def _parse_ids(self, field: str) -> list[str]:
         """Extract image IDs from the CSV value of ``dataset_image_ids``."""
 
-        if field is None or field == "":
+        if field is None or field == "" or str(field).lower() == "nan":
             return []
 
-        try:
-            ids = json.loads(field)
-        except json.JSONDecodeError:
-            # Field may be a simple pipe separated string like "1|2|3"
-            return [s for s in field.split("|") if s]
-
-        # ``ids`` can be an int, a string, or a list/tuple. Normalise to list.
-        if isinstance(ids, (list, tuple)):
-            values = ids
-        else:
-            values = [ids]
-
-        # Convert each element to string for downstream lookup
-        return [str(i) for i in values]
+        return [s for s in str(field).split("|") if s]
 
     def __iter__(self) -> Iterator[VQASample]:
         """Iterate over VQA samples as :class:`VQASample` objects."""
 
-        with open(self.csv_path, newline="", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for idx, row in enumerate(reader):
-                # Skip rows before the configured start index
-                if idx < self.start:
-                    continue
-                # Stop iterating at the end index if provided
-                if self.end is not None and idx >= self.end:
-                    break
+        for idx, row in self.df.iterrows():
+            # Skip rows before the configured start index
+            if idx < self.start:
+                continue
+            # Stop iterating at the end index if provided
+            if self.end is not None and idx >= self.end:
+                break
 
-                dataset_name = row.get("dataset_name", "inaturalist")
-                ids = self._parse_ids(row.get("dataset_image_ids", ""))
-                image_paths = self._resolve_paths(dataset_name, ids)
+            dataset_name = row.get("dataset_name", "inaturalist")
+            ids = self._parse_ids(row.get("dataset_image_ids", ""))
+            image_paths = self._resolve_paths(dataset_name, ids)
 
-                if not image_paths:
-                    print(f"[Row {idx}] 이미지 경로를 찾을 수 없습니다. 건너뜁니다.")
-                    continue
+            if not image_paths:
+                print(f"[Row {idx}] 이미지 경로를 찾을 수 없습니다. 건너뜁니다.")
+                continue
 
-                # Yield structured sample for downstream processing
-                yield VQASample(
-                    question=row.get("question", ""),
-                    answer=row.get("answer", ""),
-                    image_paths=image_paths,
-                    row_idx=idx,
-                    metadata=row,
-                    wikipedia_title=row.get("wikipedia_title", ""),
-                    wikipedia_url=row.get("wikipedia_url", ""),
-                    dataset_name=dataset_name,
-                )
+            # Yield structured sample for downstream processing
+            metadata = {k: ("" if pd.isna(v) else v) for k, v in row.items()}
+            yield VQASample(
+                question=row.get("question", ""),
+                answer=row.get("answer", ""),
+                image_paths=image_paths,
+                row_idx=idx,
+                metadata=metadata,
+                wikipedia_title=row.get("wikipedia_title", ""),
+                wikipedia_url=row.get("wikipedia_url", ""),
+                dataset_name=dataset_name,
+            )

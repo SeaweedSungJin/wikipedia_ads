@@ -14,8 +14,7 @@ bge_device: 1
 nli_device: 2
 nli_batch_size: 32
 dataset_csv: /dataset/evqa/test.csv
-id2name_paths:
-  - /dataset/inaturalist/train_id2name.json
+id2name_paths: /dataset/inaturalist/train_id2name.json
 dataset_image_root: /dataset/inaturalist
 dataset_google_root: /dataset/landmarks
 

@@ -3,14 +3,12 @@ import json
 import os
 import pickle
 from io import BytesIO
-from typing import Iterable, List, Tuple, Optional
+from typing import Optional
 import re
 from urllib.parse import unquote
 import faiss
 import nltk
 import requests
-import torch
-from tqdm import tqdm
 from PIL import Image, UnidentifiedImageError
 import numpy as np
 
@@ -50,11 +48,13 @@ def load_image(path: str) -> Image.Image:
         return Image.new("RGB", (224, 224), color=0)
 
 
-def load_faiss_and_ids(base_path: str, kb_json_path: str) -> Tuple[faiss.Index, np.ndarray, List[dict]]:
-    """Load FAISS index, kb_ids mapping and the KB list.
+def load_faiss_and_ids(base_path: str, kb_json_path: str) -> tuple[faiss.Index, np.ndarray, list[dict]]:
+    """Load FAISS index, ``kb_ids`` mapping and the KB list.
 
-    This mirrors the robust loader used by ``evaluate_pipeline.py`` so that
-    the main RAG pipeline and evaluation scripts share identical logic.
+    The accompanying ``kb_index_ids.pkl`` may store a simple array-like mapping
+    or a dictionary mapping FAISS vector positions to document URLs.  This
+    function resolves either format into an array of document indices aligned
+    with the FAISS index.
     """
 
     index_path = os.path.join(base_path, "kb_index.faiss")
@@ -64,13 +64,8 @@ def load_faiss_and_ids(base_path: str, kb_json_path: str) -> Tuple[faiss.Index, 
     index = faiss.read_index(index_path)
     ntotal = index.ntotal
 
-    # Load KB list once so that URL based mappings can be resolved.
-    kb_list = load_kb_list(kb_json_path)
-    url_to_idx = {}
-    for i, doc in enumerate(kb_list):
-        u = doc.get("url") or doc.get("wikipedia_url") or doc.get("source_url") or ""
-        if u and u not in url_to_idx:
-            url_to_idx[u] = i
+    # Load KB list and accompanying URL→index mapping for resolving dict PKLs
+    kb_list, url_to_idx = load_kb_list(kb_json_path)
 
     kb_ids: Optional[np.ndarray] = None
     tried: list[str] = []
@@ -137,24 +132,24 @@ def load_faiss_and_ids(base_path: str, kb_json_path: str) -> Tuple[faiss.Index, 
 
     return index, kb_ids, kb_list
 
-def load_kb_list(json_path: str) -> List[dict]:
+def load_kb_list(json_path: str) -> tuple[list[dict], dict[str, int]]:
     """Load a knowledge base stored as JSON or JSONL.
 
-    The file may contain either a list of documents, a mapping of URL to
-    document dictionaries, or be line-delimited JSON (JSONL).  Every document
-    is guaranteed to have a ``title`` field after loading.
+    Returns ``(kb_list, url_to_idx)`` where ``kb_list`` is the list of document
+    dicts and ``url_to_idx`` maps each document URL to its index. The input file
+    may contain either a list of documents, a mapping of URL to documents, or be
+    line-delimited JSON (JSONL). Each document is guaranteed to have a ``title``
+    field after loading.
     """
 
     print("지식베이스 JSON 로딩중...")
     with open(json_path, "r", encoding="utf-8") as f:
-        # Peek at the first non-whitespace character to decide how to parse
         first = f.read(1)
         while first.isspace():
             first = f.read(1)
         f.seek(0)
 
-        kb_list: List[dict] = []
-
+        kb_list: list[dict] = []
         if first in "{[":
             data = json.load(f)
             if isinstance(data, list):
@@ -169,7 +164,6 @@ def load_kb_list(json_path: str) -> List[dict]:
             else:
                 raise ValueError("Unsupported KB JSON structure")
         else:
-            # Fallback: treat as JSONL
             for line in f:
                 line = line.strip()
                 if not line:
@@ -177,18 +171,17 @@ def load_kb_list(json_path: str) -> List[dict]:
                 doc = json.loads(line)
                 kb_list.append(doc)
 
-    # Ensure every document has a title
-    for doc in kb_list:
+    url_to_idx: dict[str, int] = {}
+    for idx, doc in enumerate(kb_list):
         if not doc.get("title"):
             doc["title"] = doc.get("wikipedia_title") or normalize_url_to_title(
-                doc.get("url")
-                or doc.get("wikipedia_url")
-                or doc.get("source_url")
-                or ""
+                doc.get("url") or doc.get("wikipedia_url") or doc.get("source_url") or "",
             )
+        url = doc.get("url") or doc.get("wikipedia_url") or doc.get("source_url")
+        if url and url not in url_to_idx:
+            url_to_idx[url] = idx
 
-    return kb_list
-
+    return kb_list, url_to_idx
 
 # ---------------------------------------------------------------------------
 # Normalisation helpers
