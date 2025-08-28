@@ -8,6 +8,7 @@ import pandas as pd
 import json
 import os
 import pickle
+import hashlib
 
 IMAGE_EXTS = (
     ".jpg",
@@ -69,7 +70,11 @@ class VQADataset:
         # Pre-load or build an iNaturalist ID→path cache for robust lookups
         self._inat_cache: Dict[str, str] = {}
         if self.image_root and os.path.exists(self.image_root):
-            cache_path = os.path.join(self.image_root, "_id_to_path_cache.pkl")
+            # Store cache in a writable local directory instead of the dataset
+            cache_dir = os.path.join(os.getcwd(), "cache")
+            os.makedirs(cache_dir, exist_ok=True)
+            cache_name = "inat_id_cache_" + hashlib.md5(self.image_root.encode("utf-8")).hexdigest()[:8] + ".pkl"
+            cache_path = os.path.join(cache_dir, cache_name)
             if os.path.exists(cache_path):
                 try:
                     with open(cache_path, "rb") as f:
@@ -106,7 +111,7 @@ class VQADataset:
 
         merged: Dict[str, str] = {}
         for path in paths:
-            if path and os.path.exists(path):
+            if path and os.path.isfile(path):
                 try:
                     with open(path, "r", encoding="utf-8") as f:
                         data = json.load(f)
@@ -115,6 +120,9 @@ class VQADataset:
                     print(f"[INFO] Loaded id2name: {path} (+{len(data):,})")
                 except Exception as e:
                     print(f"[WARN] id2name 로딩 실패({path}): {e}")
+            else:
+                if path:
+                    print(f"[WARN] id2name 경로 무시({path}): 파일이 존재하지 않거나 디렉토리입니다")
         return merged
 
     # ------------------------------------------------------------------
@@ -236,7 +244,7 @@ class VQADataset:
             if p and os.path.exists(p):
                 paths.append(p)
         return paths
-    
+
     def _parse_ids(self, field: str) -> list[str]:
         """Extract image IDs from the CSV value of ``dataset_image_ids``."""
 
