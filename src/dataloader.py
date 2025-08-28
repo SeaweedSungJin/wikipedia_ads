@@ -9,6 +9,7 @@ import json
 import os
 import pickle
 import hashlib
+from tqdm import tqdm
 
 IMAGE_EXTS = (
     ".jpg",
@@ -136,15 +137,11 @@ class VQADataset:
 
         print(f"[INFO] Building iNat ID cache from: {base_dir}")
         id2path: Dict[str, str] = {}
-        visited = 0
+        pbar = tqdm(total=max_files, unit="files", desc="Scan iNat")
         for root, _, files in os.walk(base_dir):
             for fn in files:
-                visited += 1
-                if visited % 200000 == 0:
-                    print(
-                        f"[INFO] scanned {visited:,} files... cache size={len(id2path):,}"
-                    )
-                if visited > max_files:
+                pbar.update(1)
+                if pbar.n > max_files:
                     print("[WARN] Reached max_files limit during scan.")
                     break
                 name, ext = os.path.splitext(fn)
@@ -153,6 +150,7 @@ class VQADataset:
             else:
                 continue
             break
+        pbar.close()
 
         with open(cache_path, "wb") as f:
             pickle.dump(id2path, f)
@@ -256,14 +254,9 @@ class VQADataset:
     def __iter__(self) -> Iterator[VQASample]:
         """Iterate over VQA samples as :class:`VQASample` objects."""
 
-        for idx, row in self.df.iterrows():
-            # Skip rows before the configured start index
-            if idx < self.start:
-                continue
-            # Stop iterating at the end index if provided
-            if self.end is not None and idx >= self.end:
-                break
-
+        subset = self.df.iloc[self.start : self.end]
+        for idx, row in tqdm(subset.iterrows(), total=len(subset), desc="VQA samples"):
+            
             dataset_name = row.get("dataset_name", "inaturalist")
             ids = self._parse_ids(row.get("dataset_image_ids", ""))
             image_paths = self._resolve_paths(dataset_name, ids)

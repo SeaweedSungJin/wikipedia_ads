@@ -3,7 +3,7 @@ import json
 import os
 import pickle
 from io import BytesIO
-from typing import Optional
+from typing import Optional, Tuple, List, Dict
 import re
 from urllib.parse import unquote
 import faiss
@@ -11,6 +11,7 @@ import nltk
 import requests
 from PIL import Image, UnidentifiedImageError
 import numpy as np
+from tqdm import tqdm
 
 # Simple User-Agent compliant with Wikimedia policy
 USER_AGENT = "wikipedia_ads/1.0 (https://example.com/contact)"
@@ -48,122 +49,32 @@ def load_image(path: str) -> Image.Image:
         return Image.new("RGB", (224, 224), color=0)
 
 
-def load_faiss_and_ids(base_path: str, kb_json_path: str) -> tuple[faiss.Index, np.ndarray, list[dict]]:
-    """Load FAISS index, ``kb_ids`` mapping and the KB list.
+def load_kb_list(json_path: str) -> Tuple[List[dict], Dict[str, int]]:
+    """Load KB entries and build a URL→index mapping.
 
-    The accompanying ``kb_index_ids.pkl`` may store a simple array-like mapping
-    or a dictionary mapping FAISS vector positions to document URLs.  This
-    function resolves either format into an array of document indices aligned
-    with the FAISS index.
-    """
-
-    index_path = os.path.join(base_path, "kb_index.faiss")
-    if not os.path.exists(index_path):
-        raise FileNotFoundError(f"FAISS index not found: {index_path}")
-    print("FAISS 인덱스 로딩중...")
-    index = faiss.read_index(index_path)
-    ntotal = index.ntotal
-
-    # Load KB list and accompanying URL→index mapping for resolving dict PKLs
-    kb_list, url_to_idx = load_kb_list(kb_json_path)
-
-    kb_ids: Optional[np.ndarray] = None
-    tried: list[str] = []
-
-    # Attempt to load from common sidecar NPY names first
-    for cand in ["kb_ids.npy", "faiss_ids.npy", "doc_ids.npy"]:
-        path = os.path.join(base_path, cand)
-        tried.append(path)
-        if os.path.exists(path):
-            arr = np.load(path)
-            if arr.ndim != 1 or len(arr) != ntotal:
-                raise ValueError(f"{path} shape {arr.shape} incompatible with FAISS ntotal {ntotal}")
-            kb_ids = arr.astype(np.int64)
-            print(f"[INFO] Loaded kb_ids from {path} (len={len(kb_ids):,})")
-            break
-
-    # Fallback to legacy PKL mapping
-    if kb_ids is None:
-        pkl_path = os.path.join(base_path, "kb_index_ids.pkl")
-        tried.append(pkl_path)
-        if os.path.exists(pkl_path):
-            with open(pkl_path, "rb") as f:
-                mapping = pickle.load(f)
-            if isinstance(mapping, (list, np.ndarray)):
-                mapping = np.array(mapping)
-                if mapping.ndim != 1 or len(mapping) != ntotal:
-                    raise ValueError(f"{pkl_path} length {len(mapping)} incompatible with FAISS ntotal {ntotal}")
-                kb_ids = mapping.astype(np.int64)
-                print(f"[INFO] Loaded kb_ids from array-like PKL (len={len(kb_ids):,})")
-            elif isinstance(mapping, dict):
-                kb_ids = np.empty(ntotal, dtype=np.int64)
-                kb_ids.fill(-1)
-                bad = 0
-                for k, v in mapping.items():
-                    try:
-                        k = int(k)
-                    except Exception:
-                        continue
-                    if isinstance(v, (int, np.integer)):
-                        kb_ids[k] = int(v)
-                    else:
-                        idx = url_to_idx.get(str(v), -1)
-                        if idx == -1:
-                            norm_v = normalize_url_to_title(str(v))
-                            candidates = [i for i, d in enumerate(kb_list) if normalize_title(d.get("title")) == norm_v]
-                            idx = candidates[0] if candidates else -1
-                        kb_ids[k] = idx
-                    if kb_ids[k] == -1:
-                        bad += 1
-                if bad:
-                    print(f"[WARN] {bad} entries in mapping PKL could not be matched to KB docs")
-                if (kb_ids == -1).any():
-                    raise ValueError("kb_ids contains -1 (unmatched). Provide a consistent mapping.")
-                print(f"[INFO] Built kb_ids from dict PKL (len={len(kb_ids):,})")
-            else:
-                raise ValueError(f"Unsupported mapping PKL type: {type(mapping)}")
-
-    if kb_ids is None:
-        raise FileNotFoundError("Could not load kb_ids. Tried: " + ", ".join(tried))
-    if len(kb_ids) != ntotal:
-        raise AssertionError(f"kb_ids length {len(kb_ids)} != index.ntotal {ntotal}")
-    if kb_ids.min() < 0 or kb_ids.max() >= len(kb_list):
-        raise ValueError("kb_ids contains out-of-range doc indices for the given KB list.")
-
-    return index, kb_ids, kb_list
-
-def load_kb_list(json_path: str) -> tuple[list[dict], dict[str, int]]:
-    """Load a knowledge base stored as JSON or JSONL.
-
-    Returns ``(kb_list, url_to_idx)`` where ``kb_list`` is the list of document
-    dicts and ``url_to_idx`` maps each document URL to its index. The input file
-    may contain either a list of documents, a mapping of URL to documents, or be
-    line-delimited JSON (JSONL). Each document is guaranteed to have a ``title``
-    field after loading.
+    The KB file may be JSONL, a JSON list, or a dictionary of documents. This
+    helper tries to gracefully handle all cases.
     """
 
     print("지식베이스 JSON 로딩중...")
-    with open(json_path, "r", encoding="utf-8") as f:
-        first = f.read(1)
-        while first.isspace():
-            first = f.read(1)
-        f.seek(0)
+    kb_list: List[dict] = []
+    url_to_idx: Dict[str, int] = {}
 
-        kb_list: list[dict] = []
-        if first in "{[":
+    with open(json_path, "r", encoding="utf-8") as f:
+        try:
             data = json.load(f)
             if isinstance(data, list):
                 kb_list = data
             elif isinstance(data, dict):
-                for url, doc in data.items():
-                    doc = dict(doc)
-                    doc.setdefault("url", url)
-                    if not doc.get("title"):
-                        doc["title"] = doc.get("wikipedia_title") or normalize_url_to_title(url)
-                    kb_list.append(doc)
+                if all(isinstance(k, str) and k.isdigit() for k in data.keys()):
+                    for k in sorted(data.keys(), key=int):
+                        kb_list.append(data[k])
+                else:
+                    kb_list = list(data.values())
             else:
-                raise ValueError("Unsupported KB JSON structure")
-        else:
+                raise ValueError("Unsupported JSON structure")
+        except json.JSONDecodeError:
+            f.seek(0)
             for line in f:
                 line = line.strip()
                 if not line:
@@ -171,17 +82,48 @@ def load_kb_list(json_path: str) -> tuple[list[dict], dict[str, int]]:
                 doc = json.loads(line)
                 kb_list.append(doc)
 
-    url_to_idx: dict[str, int] = {}
-    for idx, doc in enumerate(kb_list):
-        if not doc.get("title"):
-            doc["title"] = doc.get("wikipedia_title") or normalize_url_to_title(
-                doc.get("url") or doc.get("wikipedia_url") or doc.get("source_url") or "",
-            )
-        url = doc.get("url") or doc.get("wikipedia_url") or doc.get("source_url")
-        if url and url not in url_to_idx:
-            url_to_idx[url] = idx
+    for i, doc in enumerate(kb_list):
+        if isinstance(doc, dict) and "wikipedia_url" in doc:
+            url_to_idx[doc["wikipedia_url"]] = i
 
     return kb_list, url_to_idx
+
+
+def load_faiss_and_ids(
+    base_path: str, kb_list: List[dict], url_to_idx: Dict[str, int]
+) -> Tuple[faiss.Index, np.ndarray]:
+    """
+    FAISS 인덱스를 로드하고, pkl 파일의 타입에 따라 ID 매핑을 검증 및 재정렬합니다.
+    """
+    print("FAISS 인덱스 로딩중...")
+    index_path = os.path.join(base_path, "kb_index.faiss")
+    ids_path = os.path.join(base_path, "kb_index_ids.pkl")
+
+    index = faiss.read_index(index_path)
+
+    with open(ids_path, "rb") as f:
+        mapping = pickle.load(f)
+
+    if isinstance(mapping, dict):
+        print(f"[INFO] Dict 타입의 pkl 로드. {len(mapping)}개의 ID를 재매핑합니다...")
+        new_ids = np.zeros(len(mapping), dtype=np.int32)
+        for faiss_idx, doc_url in tqdm(mapping.items(), desc="Re-mapping FAISS IDs"):
+            if doc_url in url_to_idx:
+                doc_idx = url_to_idx[doc_url]
+                new_ids[faiss_idx] = doc_idx
+            else:
+                pass
+        ids = new_ids
+        print("[INFO] ID 재매핑 완료.")
+    else:
+        print(f"[INFO] Array 타입의 pkl 로드 (길이={len(mapping)})")
+        ids = np.array(mapping, dtype=np.int32)
+
+    assert index.ntotal == len(ids), (
+        f"FAISS 인덱스({index.ntotal})와 ID 목록({len(ids)})의 길이가 일치하지 않습니다."
+    )
+
+    return index, ids
 
 # ---------------------------------------------------------------------------
 # Normalisation helpers

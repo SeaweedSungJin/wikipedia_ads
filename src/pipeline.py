@@ -17,6 +17,7 @@ from .utils import (
     download_nltk_data,
     load_image,
     load_faiss_and_ids,
+    load_kb_list,
     normalize_title,
 )
 from tqdm import tqdm
@@ -43,6 +44,7 @@ from .segmenter import (
 _FAISS_INDEX = None
 _KB_IDS = None
 _KB_LIST = None
+_URL_TO_IDX = None
 _BGE_CACHE = None
 
 def _get_bge(model_name: str, device):
@@ -104,13 +106,17 @@ def search_rag_pipeline(
             segmenter = ParagraphSegmenter(cfg.chunk_size)
             
     # Load FAISS index, mapping IDs and KB list once and cache globally
-    global _FAISS_INDEX, _KB_IDS, _KB_LIST
-    if _FAISS_INDEX is None or _KB_IDS is None or _KB_LIST is None:
-        _FAISS_INDEX, _KB_IDS, _KB_LIST = load_faiss_and_ids(
-            cfg.base_path, cfg.kb_json_path
+    global _FAISS_INDEX, _KB_IDS, _KB_LIST, _URL_TO_IDX
+    if _KB_LIST is None or _URL_TO_IDX is None:
+        _KB_LIST, _URL_TO_IDX = load_kb_list(cfg.kb_json_path)
+
+    if _FAISS_INDEX is None or _KB_IDS is None:
+        _FAISS_INDEX, _KB_IDS = load_faiss_and_ids(
+            cfg.base_path, _KB_LIST, _URL_TO_IDX
         )
 
-    faiss_index, kb_ids, kb_list = _FAISS_INDEX, _KB_IDS, _KB_LIST
+    faiss_index, kb_ids = _FAISS_INDEX, _KB_IDS
+    kb_list = _KB_LIST
 
     start_time = time.time()
 

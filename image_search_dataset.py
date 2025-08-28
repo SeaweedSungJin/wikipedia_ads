@@ -8,6 +8,7 @@ from src.models import load_image_model
 from src.embedding import encode_image
 from src.utils import (
     load_faiss_and_ids,
+    load_kb_list,
     load_image,
     normalize_title,
     normalize_url_to_title,
@@ -36,8 +37,9 @@ def run_image_search_dataset(cfg: Config) -> None:
         dev = "cpu"
 
     image_model, image_processor = load_image_model(device_map=dev)
-    faiss_index, kb_ids, kb_list = load_faiss_and_ids(cfg.base_path, cfg.kb_json_path)
-
+    kb_list, url_to_idx = load_kb_list(cfg.kb_json_path)
+    faiss_index, kb_ids = load_faiss_and_ids(cfg.base_path, kb_list, url_to_idx)
+    
     # Precompute first image index per document when enforcing first_image_only
     doc_to_first: dict[int, int] = {}
     if cfg.first_image_only:
