@@ -13,13 +13,7 @@ import time
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-from .utils import (
-    download_nltk_data,
-    load_image,
-    load_faiss_and_ids,
-    load_kb_list,
-    normalize_title,
-)
+from .utils import download_nltk_data, load_image, load_faiss_and_ids, normalize_title
 from tqdm import tqdm
 import torch
 
@@ -129,7 +123,10 @@ def search_rag_pipeline(
 
     # Encode the query image and search the FAISS index
     img = load_image(cfg.image_path)
-    img_emb_np = encode_image(img, image_model, image_processor).numpy()
+    img_emb = encode_image(img, image_model, image_processor)
+
+    # FAISS 검색을 위해 float32로 변환하는 코드 추가
+    img_emb_np = img_emb.float().numpy()
 
     # Retrieve more candidates than needed so that filtered pages
     # (e.g., "list of" or "outline of" entries) can be skipped
