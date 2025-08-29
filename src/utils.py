@@ -93,125 +93,42 @@ def load_kb(knowledge_json_path: str) -> Tuple[List[dict], Dict[str, int]]:
 
     return kb_list, url_to_idx
 
+# in src/utils.py
 
-def load_faiss_and_ids(
-    base_path: str, kb_json_path: str
-) -> Tuple[faiss.Index, np.ndarray, List[dict]]:
-    """Load FAISS index, accompanying IDs and the KB list.
-
-    ``kb_index.faiss`` is read from ``base_path`` and several sidecar files are
-    probed for the FAISS→document ID mapping.  If only a mapping pickle is
-    available it may contain either a list/ndarray of indices or a
-    ``{faiss_id: url}`` dictionary which is resolved against the KB.
+def load_faiss_and_ids(base_path: str, kb_list: List[dict], url_to_idx: Dict[str, int]) -> Tuple[faiss.Index, np.ndarray]:
     """
-
+    FAISS 인덱스를 로드하고, pkl 파일의 타입에 따라 ID 매핑을 검증 및 재정렬합니다.
+    """
     index_path = os.path.join(base_path, "kb_index.faiss")
-    if not os.path.exists(index_path):
-        raise FileNotFoundError(f"FAISS index not found: {index_path}")
+    ids_path = os.path.join(base_path, "kb_index_ids.pkl")
 
     index = faiss.read_index(index_path)
-    ntotal = index.ntotal
+    
+    with open(ids_path, "rb") as f:
+        mapping = pickle.load(f)
 
-    kb_list, url_to_idx = load_kb(kb_json_path)
-
-    kb_ids: Optional[np.ndarray] = None
-    side_tried: List[str] = []
-
-    side_candidates = [os.path.join(base_path, name) for name in [
-        "kb_ids.npy",
-        "faiss_ids.npy",
-        "doc_ids.npy",
-    ]]
-
-    tried = set()
-    for path in side_candidates:
-        if path in tried:
-            continue
-        tried.add(path)
-        side_tried.append(path)
-        if os.path.exists(path):
-            arr = np.load(path)
-            if arr.ndim != 1:
-                raise ValueError(f"{path} must be 1-D array, got shape {arr.shape}")
-            if len(arr) != ntotal:
-                raise ValueError(
-                    f"{path} length {len(arr)} != index.ntotal {ntotal}"
-                )
-            kb_ids = arr.astype(np.int64)
-            print(f"[INFO] Loaded kb_ids from {path} (len={len(kb_ids):,})")
-            break
-
-    mapping_pkl_path = os.path.join(base_path, "kb_index_ids.pkl")
-    if kb_ids is None and mapping_pkl_path and os.path.exists(mapping_pkl_path):
-        side_tried.append(mapping_pkl_path)
-        with open(mapping_pkl_path, "rb") as f:
-            mapping = pickle.load(f)
-        if isinstance(mapping, (list, np.ndarray)):
-            mapping = np.array(mapping)
-            if mapping.ndim != 1:
-                raise ValueError(f"{mapping_pkl_path} must be 1-D array-like")
-            if len(mapping) != ntotal:
-                raise ValueError(
-                    f"{mapping_pkl_path} length {len(mapping)} != index.ntotal {ntotal}"
-                )
-            kb_ids = mapping.astype(np.int64)
-            print(
-                f"[INFO] Loaded kb_ids from array-like PKL (len={len(kb_ids):,})"
-            )
-        elif isinstance(mapping, dict):
-            kb_ids = np.empty(ntotal, dtype=np.int64)
-            kb_ids.fill(-1)
-            bad = 0
-            for k, v in mapping.items():
-                try:
-                    k_int = int(k)
-                except Exception:
-                    continue
-                if isinstance(v, (int, np.integer)):
-                    kb_ids[k_int] = int(v)
-                else:
-                    v_str = str(v)
-                    idx = url_to_idx.get(v_str, -1)
-                    if idx == -1:
-                        norm_v = normalize_url_to_title(v_str)
-                        candidates = [
-                            i
-                            for i, d in enumerate(kb_list)
-                            if normalize_title(d.get("title")) == norm_v
-                        ]
-                        idx = candidates[0] if candidates else -1
-                    kb_ids[k_int] = idx
-                if kb_ids[k_int] == -1:
-                    bad += 1
-            if bad:
-                print(
-                    f"[WARN] {bad} entries in mapping PKL could not be matched to KB docs"
-                )
-            if (kb_ids == -1).any():
-                raise ValueError(
-                    "kb_ids contains -1 (unmatched). Please provide kb_ids.npy or a consistent mapping."
-                )
-            print(f"[INFO] Built kb_ids from dict PKL (len={len(kb_ids):,})")
-        else:
-            raise ValueError(f"Unsupported mapping PKL type: {type(mapping)}")
-
-    if kb_ids is None:
-        raise FileNotFoundError(
-            "Could not load kb_ids. Tried: " + ", ".join(side_tried) +
-            ". Provide kb_ids.npy (or faiss_ids.npy), or a PKL that can be resolved."
-        )
-
-    if len(kb_ids) != ntotal:
-        raise AssertionError(
-            f"kb_ids length {len(kb_ids)} != index.ntotal {ntotal}"
-        )
-
-    if kb_ids.min() < 0 or kb_ids.max() >= len(kb_list):
-        raise ValueError(
-            "kb_ids contains out-of-range doc indices for the given KB list."
-        )
-
-    return index, kb_ids, kb_list
+    if isinstance(mapping, dict):
+        print(f"[INFO] Dict 타입의 pkl 로드. {len(mapping)}개의 ID를 재매핑합니다...")
+        new_ids = np.zeros(len(mapping), dtype=np.int32)
+        for faiss_idx, doc_url in tqdm(mapping.items(), desc="Re-mapping FAISS IDs"):
+            if doc_url in url_to_idx:
+                doc_idx = url_to_idx[doc_url]
+                new_ids[faiss_idx] = doc_idx
+            else:
+                pass  # URL을 찾을 수 없는 경우 무시
+        ids = new_ids
+        print("[INFO] ID 재매핑 완료.")
+    else:
+        print(f"[INFO] Array 타입의 pkl 로드 (길이={len(mapping)})")
+        ids = np.array(mapping, dtype=np.int32)
+    
+    # 최종 검증
+    assert index.ntotal == len(ids), (
+        f"FAISS 인덱스({index.ntotal})와 ID 목록({len(ids)})의 길이가 일치하지 않습니다."
+    )
+    
+    # 이 함수는 이제 kb_list를 반환하지 않습니다.
+    return index, ids
 
 # ---------------------------------------------------------------------------
 # Normalisation helpers
