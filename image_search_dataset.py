@@ -91,11 +91,14 @@ def run_image_search_dataset(cfg: Config) -> None:
             print(f"[Row {sample.row_idx}] 이미지 로딩 실패: {e}")
             continue
         
-        # 이미지 임베딩 및 .float() 변환 (핵심 수정 ③)
+        # 이미지 임베딩 및
         img_emb = encode_image(img, image_model, image_processor)
-        img_emb_np = img_emb.float().numpy()
-        
-        # FAISS 검색
+
+        # --- 정규화 코드 추가 ---
+        img_emb = img_emb / img_emb.norm(dim=-1, keepdim=True)
+        # ----------------------
+
+        img_emb_np = img_emb.cpu().numpy() # .float() 제거 또는 유지(일관성 확인 필요)
         distances, indices = faiss_index.search(img_emb_np, search_k)
 
         # --- 후보군 필터링 및 Recall 계산 ---
