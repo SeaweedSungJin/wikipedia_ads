@@ -75,13 +75,17 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
         total_bge_elapsed += bge_elapsed
         sample_total += 1
 
-        # Ground-truth parsing for potential multi-hop questions
-        if sample.wikipedia_title:
-            raw_titles = str(sample.wikipedia_title).split("|")
-            gt_titles = [normalize_title(t) for t in raw_titles]
-        else:
-            raw_urls = str(sample.wikipedia_url).split("|") if sample.wikipedia_url else []
-            gt_titles = [normalize_url_to_title(u) for u in raw_urls]
+        # --- Ground Truth(정답) 파싱 로직 수정 ---
+        gt_titles_raw = str(sample.wikipedia_title or '').split('|')
+        gt_urls_raw = str(sample.wikipedia_url or '').split('|')
+
+        gt_titles: list[str] = []
+        for title in gt_titles_raw:
+            if title.strip():
+                gt_titles.append(normalize_title(title))
+        for url in gt_urls_raw:
+            if url.strip():
+                gt_titles.append(normalize_url_to_title(url))
         gt_title_set = set(gt_titles)
 
         sec_ids_raw = sample.metadata.get("evidence_section_id")

@@ -21,8 +21,8 @@ def encode_image(image, model, processor) -> torch.Tensor:
     embedding = model.encode_image(pixel_values)
     embedding = nn.functional.normalize(embedding, dim=-1)
 
-    embedding = embedding.cpu()
-
+    # Ensure the returned vector matches FAISS expectations
+    embedding = embedding.to(dtype=torch.float32, device="cpu")
     # Free GPU memory used for intermediate tensors
     del pixel_values
     try:

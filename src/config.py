@@ -17,6 +17,7 @@ class Config:
     k_value: int  # Number of images to retrieve
     m_value: int  # Number of text sections to return
     alpha: float  # Weight for image/text fusion
+    search_expand: int | None = None  # Oversampled FAISS results before filtering
 
     # Model options
     text_encoder_model: str = "facebook/contriever"  # HuggingFace model name
