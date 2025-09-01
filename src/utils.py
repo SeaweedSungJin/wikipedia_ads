@@ -109,25 +109,26 @@ def load_faiss_and_ids(base_path: str, kb_list: List[dict], url_to_idx: Dict[str
 
     if isinstance(mapping, dict):
         print(f"[INFO] Dict 타입의 pkl 로드. {len(mapping)}개의 ID를 재매핑합니다...")
-        new_ids = np.zeros(len(mapping), dtype=np.int32)
+        new_ids = np.full(len(mapping), -1, dtype=np.int64)
         for faiss_idx, doc_url in tqdm(mapping.items(), desc="Re-mapping FAISS IDs"):
-            if doc_url in url_to_idx:
-                doc_idx = url_to_idx[doc_url]
+            doc_idx = url_to_idx.get(doc_url, -1)
+            if doc_idx != -1:
                 new_ids[faiss_idx] = doc_idx
-            else:
-                pass  # URL을 찾을 수 없는 경우 무시
         ids = new_ids
         print("[INFO] ID 재매핑 완료.")
     else:
         print(f"[INFO] Array 타입의 pkl 로드 (길이={len(mapping)})")
-        ids = np.array(mapping, dtype=np.int32)
+        ids = np.array(mapping, dtype=np.int64)
     
     # 최종 검증
-    assert index.ntotal == len(ids), (
-        f"FAISS 인덱스({index.ntotal})와 ID 목록({len(ids)})의 길이가 일치하지 않습니다."
-    )
-    
-    # 이 함수는 이제 kb_list를 반환하지 않습니다.
+    if index.ntotal != len(ids):
+        raise ValueError(
+            f"FAISS 인덱스({index.ntotal})와 ID 목록({len(ids)})의 길이가 일치하지 않습니다."
+        )
+
+    if (ids < 0).any() or ids.max() >= len(kb_list):
+        raise ValueError("kb_ids contains invalid document indices")
+
     return index, ids
 
 # ---------------------------------------------------------------------------

@@ -5,6 +5,7 @@ text_query: Who built the choir at this abbey?
 k_value: 10
 m_value: 10
 alpha: 0.9
+search_expand: 200
 first_image_only: false
 use_tfidf_filter: false
 tfidf_ratio: 0.5

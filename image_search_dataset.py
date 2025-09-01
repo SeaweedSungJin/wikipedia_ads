@@ -72,13 +72,18 @@ def run_image_search_dataset(cfg: Config) -> None:
         if not sample.image_paths:
             continue
         
-        # Ground Truth(정답) 파싱
-        if sample.wikipedia_title:
-            raw_titles = str(sample.wikipedia_title).split("|")
-            gt_titles = {normalize_title(t) for t in raw_titles}
-        else:
-            raw_urls = str(sample.wikipedia_url).split("|") if sample.wikipedia_url else []
-            gt_titles = {normalize_url_to_title(u) for u in raw_urls}
+        # --- Ground Truth(정답) 파싱 로직 수정 ---
+        gt_titles_raw = str(sample.wikipedia_title or '').split('|')
+        gt_urls_raw = str(sample.wikipedia_url or '').split('|')
+
+        gt_titles = set()
+        for title in gt_titles_raw:
+            if title.strip():
+                gt_titles.add(normalize_title(title))
+        for url in gt_urls_raw:
+            if url.strip():
+                gt_titles.add(normalize_url_to_title(url))
+        # --- 수정 완료 ---
 
         if not gt_titles:
             continue

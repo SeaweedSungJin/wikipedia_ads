@@ -13,7 +13,7 @@ import time
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-from .utils import download_nltk_data, load_image, load_faiss_and_ids, normalize_title
+from .utils import download_nltk_data, load_image, load_faiss_and_ids, normalize_title, load_kb
 from tqdm import tqdm
 import torch
 
@@ -102,7 +102,7 @@ def search_rag_pipeline(
     # Load FAISS index, mapping IDs and KB list once and cache globally
     global _FAISS_INDEX, _KB_IDS, _KB_LIST, _URL_TO_IDX
     if _KB_LIST is None or _URL_TO_IDX is None:
-        _KB_LIST, _URL_TO_IDX = load_kb_list(cfg.kb_json_path)
+        _KB_LIST, _URL_TO_IDX = load_kb(cfg.kb_json_path)
 
     if _FAISS_INDEX is None or _KB_IDS is None:
         _FAISS_INDEX, _KB_IDS = load_faiss_and_ids(
@@ -124,13 +124,14 @@ def search_rag_pipeline(
     # Encode the query image and search the FAISS index
     img = load_image(cfg.image_path)
     img_emb = encode_image(img, image_model, image_processor)
-
-    # FAISS 검색을 위해 float32로 변환하는 코드 추가
-    img_emb_np = img_emb.float().numpy()
+    img_emb_np = img_emb.numpy().astype("float32")
+    # Re-normalise in case of numeric drift after conversion
+    img_emb_np /= np.linalg.norm(img_emb_np, axis=1, keepdims=True)
 
     # Retrieve more candidates than needed so that filtered pages
     # (e.g., "list of" or "outline of" entries) can be skipped
-    search_k = min(cfg.k_value * 20, faiss_index.ntotal)
+    expand = cfg.search_expand if cfg.search_expand is not None else cfg.k_value * 20
+    search_k = min(expand, faiss_index.ntotal)
     distances, indices = faiss_index.search(img_emb_np, k=search_k)
 
     # Collect top-K image search results using the evaluate_pipeline logic
