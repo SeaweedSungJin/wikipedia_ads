@@ -21,19 +21,12 @@ __all__ = [
 ]
 
 
-def load_nli_model(
-    model_name: str, device: torch.device | str = "cpu"
-) -> Tuple[AutoModelForSequenceClassification, AutoTokenizer]:
-    """Load an NLI model and tokenizer."""
-    print(f"Loading NLI model: {model_name}")
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    # Avoid forcing FP16; some checkpoints (e.g., DeBERTa MNLI) mix dtypes
-    # internally and error out when weights are half precision. Default to
-    # the model's native dtype and rely on autocast if needed by callers.
-    model = AutoModelForSequenceClassification.from_pretrained(model_name)
-    model.to(device)
-    model.eval()
-    return model, tokenizer
+"""NLI-based clustering utilities.
+
+This module assumes an already-loaded NLI model and tokenizer are provided
+by callers (see models.load_nli_model). It handles tokenization length
+clamping and graph construction.
+"""
 
 
 def _effective_max_length(tokenizer, model, requested: int) -> int:

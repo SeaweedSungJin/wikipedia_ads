@@ -48,14 +48,14 @@ nli_lambda: 0.7
 
 # NLI model selection
 nli_models:
-  deberta: false
+  deberta: true
   roberta: false
-  deberta_v3: true
+  deberta_v3: false
 
 # Reranker settings
 rerankers:
   contriever: false
   jina_m0: false
-  bge: true
-  electra: false
+  bge: false
+  electra: true
   mpnet: false

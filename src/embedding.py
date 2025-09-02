@@ -35,7 +35,7 @@ def encode_image(image, model, processor) -> torch.Tensor:
 
 @torch.no_grad()
 def get_text_embedding(texts: List[str], model, tokenizer, batch_size: int = 32) -> torch.Tensor:
-    """Compute text embeddings using Vicuna."""
+    """Compute text embeddings using the provided HF encoder."""
 
     # Early exit for empty inputs
     if not texts:

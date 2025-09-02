@@ -21,12 +21,10 @@ from .models import (
     get_device,
     load_image_model,
     load_text_encoder,
-    load_jina_reranker,
     setup_cuda,
-    load_bge_reranker,
-    load_electra_reranker,
     load_mpnet_biencoder,
 )
+from .rerankers import BGEReranker, ElectraReranker, JinaReranker
 from .encoders import TextEncoder
 from .segmenter import (
     Segmenter,
@@ -241,21 +239,8 @@ def search_rag_pipeline(
             filtered_sections[i]["similarity"] = best_score
 
     if use_jina:
-        # Load the cross-encoder reranker on the specified device
-        jina_dev = (
-            f"cuda:{cfg.bge_device}" if isinstance(cfg.bge_device, int) else cfg.bge_device
-        )
-        if not torch.cuda.is_available() and isinstance(jina_dev, str) and "cuda" in jina_dev:
-            jina_dev = "cpu"
-        reranker = load_jina_reranker(jina_dev)
-        # Prepare query/document pairs for cross-encoder scoring
-        jina_inputs = [[cfg.text_query, s["section_text"]] for s in filtered_sections]
-
-        with torch.no_grad():
-            scores = reranker.compute_score(
-                jina_inputs, max_length=8192, doc_type="text"
-            )
-
+        reranker = JinaReranker(device=cfg.bge_device)
+        scores = reranker.score(cfg.text_query, [s["section_text"] for s in filtered_sections])
         for sec, score in zip(filtered_sections, scores):
             sec["similarity"] = float(score)
 
@@ -265,26 +250,10 @@ def search_rag_pipeline(
         )
         if not torch.cuda.is_available() and isinstance(bge_dev, str) and "cuda" in bge_dev:
             bge_dev = "cpu"
-        model, tokenizer = _get_bge(cfg.bge_model, bge_dev)
-        bge_batch_size = 32
-        all_scores = []
-        print(f"BGE Reranking {len(filtered_sections)} sections in batches of {bge_batch_size}...")
-        for i in tqdm(range(0, len(filtered_sections), bge_batch_size), desc="BGE Reranking"):
-            batch_sections = filtered_sections[i:i + bge_batch_size]
-            pairs = [[cfg.text_query, s["section_text"]] for s in batch_sections]
-            if not pairs:
-                continue
-            inputs = tokenizer(
-                pairs,
-                padding=True,
-                truncation=True,
-                return_tensors="pt",
-                max_length=cfg.bge_max_length,
-            ).to(bge_dev)
-            with torch.no_grad():
-                batch_scores = model(**inputs, return_dict=True).logits.view(-1).cpu().float()
-                all_scores.extend(batch_scores.tolist())
-        for sec, score in zip(filtered_sections, all_scores):
+        reranker = BGEReranker(cfg.bge_model, device=cfg.bge_device, max_length=cfg.bge_max_length, batch_size=32)
+        print(f"BGE Reranking {len(filtered_sections)} sections in batches of 32...")
+        scores = reranker.score(cfg.text_query, [s["section_text"] for s in filtered_sections])
+        for sec, score in zip(filtered_sections, scores):
             sec["similarity"] = float(score)
 
     if use_electra:
@@ -293,40 +262,10 @@ def search_rag_pipeline(
         )
         if not torch.cuda.is_available() and isinstance(ce_dev, str) and "cuda" in ce_dev:
             ce_dev = "cpu"
-        model, tokenizer = load_electra_reranker(cfg.electra_model, ce_dev)
-        ce_batch_size = 32
-        all_scores = []
-        print(f"Electra Reranking {len(filtered_sections)} sections in batches of {ce_batch_size}...")
-        for i in tqdm(range(0, len(filtered_sections), ce_batch_size), desc="Electra Reranking"):
-            batch_sections = filtered_sections[i:i + ce_batch_size]
-            pairs = [[cfg.text_query, s["section_text"]] for s in batch_sections]
-            if not pairs:
-                continue
-            inputs = tokenizer(
-                pairs,
-                padding=True,
-                truncation=True,
-                return_tensors="pt",
-                max_length=cfg.bge_max_length,
-            ).to(ce_dev)
-            with torch.no_grad():
-                logits = model(**inputs, return_dict=True).logits
-                # Support both regression/binary and 3-class NLI heads.
-                # - Regression (e.g. MS MARCO cross-encoders): shape [B, 1]
-                # - Binary classification: shape [B, 2] (use positive class)
-                # - NLI 3-way classification: shape [B, 3] (use entailment = idx 2)
-                if logits.ndim == 2 and logits.shape[1] == 1:
-                    batch_scores = logits.view(-1).cpu().float()
-                elif logits.ndim == 2 and logits.shape[1] == 2:
-                    batch_scores = logits[:, 1].cpu().float()
-                elif logits.ndim == 2 and logits.shape[1] >= 3:
-                    batch_scores = logits[:, 2].cpu().float()
-                else:
-                    raise ValueError(
-                        f"Unexpected Electra logits shape: {tuple(logits.shape)}"
-                    )
-                all_scores.extend(batch_scores.tolist())
-        for sec, score in zip(filtered_sections, all_scores):
+        reranker = ElectraReranker(cfg.electra_model, device=cfg.bge_device, max_length=cfg.bge_max_length, batch_size=32)
+        print(f"Electra Reranking {len(filtered_sections)} sections in batches of 32...")
+        scores = reranker.score(cfg.text_query, [s["section_text"] for s in filtered_sections])
+        for sec, score in zip(filtered_sections, scores):
             sec["similarity"] = float(score)
 
     if use_mpnet:

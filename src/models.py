@@ -244,6 +244,32 @@ def load_vlm_model(
     return _VLM_MODEL, _VLM_PROCESSOR
 
 
+def resolve_device(spec: int | str) -> torch.device:
+    """Resolve a device spec (int CUDA id or string) with safe CPU fallback."""
+    dev = f"cuda:{spec}" if isinstance(spec, int) else str(spec)
+    if not torch.cuda.is_available() and "cuda" in dev:
+        dev = "cpu"
+    return torch.device(dev)
+
+
+def load_nli_model(
+    model_name: str,
+    device: torch.device | str = "cpu",
+):
+    """Load an NLI sequence classification model and tokenizer.
+
+    Does not force half precision; uses the model's native dtype.
+    """
+    from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
+    print(f"Loading NLI model: {model_name}")
+    tok = AutoTokenizer.from_pretrained(model_name)
+    mdl = AutoModelForSequenceClassification.from_pretrained(model_name)
+    mdl.to(device)
+    mdl.eval()
+    return mdl, tok
+
+
 def generate_vlm_answer(
     model,
     processor,

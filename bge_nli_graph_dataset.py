@@ -5,8 +5,8 @@ import torch
 from src.config import Config
 from src.dataloader import VQADataset
 from src.pipeline import search_rag_pipeline
-from src.nli_cluster import load_nli_model, cluster_sections_clique
-from src.models import load_vlm_model, generate_vlm_answer
+from src.nli_cluster import cluster_sections_clique
+from src.models import load_vlm_model, generate_vlm_answer, load_nli_model, resolve_device
 from src.eval import evaluate_example
 from src.utils import normalize_title, normalize_url_to_title
 
@@ -22,14 +22,7 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
     )
     print(f"데이터셋 평가 범위: start={cfg.dataset_start}, end={cfg.dataset_end}.")
 
-    def _resolve(dev):
-        if isinstance(dev, int):
-            dev = f"cuda:{dev}"
-        if not torch.cuda.is_available() and isinstance(dev, str) and "cuda" in dev:
-            dev = "cpu"
-        return torch.device(dev)
-
-    device = _resolve(cfg.nli_device)
+    device = resolve_device(cfg.nli_device)
     nli_choice = cfg.nli_models.get
     if nli_choice("deberta", False):
         model_name = cfg.deberta_nli_model
