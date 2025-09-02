@@ -1,20 +1,14 @@
 from __future__ import annotations
 
-import logging
 import time
 import torch
 from src.config import Config
 from src.dataloader import VQADataset
 from src.pipeline import search_rag_pipeline
-# Import NLI loader and clique-based section clustering helper.
 from src.nli_cluster import load_nli_model, cluster_sections_clique
 from src.models import load_vlm_model, generate_vlm_answer
 from src.eval import evaluate_example
 from src.utils import normalize_title, normalize_url_to_title
-
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 
 def run_bge_nli_graph_dataset(cfg: Config) -> None:
@@ -38,13 +32,10 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
     device = _resolve(cfg.nli_device)
     model, tokenizer = load_nli_model(cfg.nli_model, device)
     vlm_model, vlm_processor = load_vlm_model(device_map=cfg.bge_device)
-    logger.info(
+    print(
         "NLI clustering mode: clique-weighted (ent-contr) using e_min/margin/tau"
     )
-    print(
-        "이미지 검색 모드:",
-        "대표 이미지 1개만 사용" if cfg.first_image_only else "문서의 모든 이미지 사용",
-    )
+    print("이미지 검색 모드: 문서의 모든 이미지 사용")
 
     total_bge_elapsed = 0.0
     total_nli_elapsed = 0.0
@@ -75,6 +66,16 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
         total_bge_elapsed += bge_elapsed
         sample_total += 1
 
+        candidate_sections = [
+            {
+                "doc_title": s.get("source_title", ""),
+                "section_id": s.get("section_idx"),
+                "section_text": s.get("section_text", ""),
+                "similarity": s.get("similarity", 0.0),
+            }
+            for s in top_sections
+        ]
+
         # --- Ground Truth(정답) 파싱 로직 수정 ---
         gt_titles_raw = str(sample.wikipedia_title or '').split('|')
         gt_urls_raw = str(sample.wikipedia_url or '').split('|')
@@ -87,6 +88,7 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
             if url.strip():
                 gt_titles.append(normalize_url_to_title(url))
         gt_title_set = set(gt_titles)
+        # --- 수정 완료 ---
 
         sec_ids_raw = sample.metadata.get("evidence_section_id")
         raw_sections: list[str] = []
@@ -113,18 +115,18 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
             if doc_rank is not None and doc_rank <= k:
                 img_doc_hits[k] += 1
 
-        if top_sections:
+        if candidate_sections:
             for k in k_values:
-                subset = top_sections[:k]
+                subset = candidate_sections[:k]
                 if any(
-                    normalize_title(sec.get("source_title")) in gt_title_set
+                    normalize_title(sec.get("doc_title")) in gt_title_set
                     for sec in subset
                 ):
                     bge_doc_hits[k] += 1
                 if any(
                     (
-                        normalize_title(sec.get("source_title")),
-                        sec.get("section_idx"),
+                        normalize_title(sec.get("doc_title")),
+                        sec.get("section_id"),
                     )
                     in gt_pairs
                     for sec in subset
@@ -132,8 +134,8 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
                     bge_sec_hits[k] += 1
 
             nli_start = time.time()
-            clusters, stats = cluster_sections_clique(
-                top_sections,
+            clusters, _ = cluster_sections_clique(
+                candidate_sections,
                 model=model,
                 tokenizer=tokenizer,
                 max_length=cfg.nli_max_length,
@@ -171,14 +173,14 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
                 cl_subset = clusters[:k]
                 secs = [s for cl in cl_subset for s in cl["sections"]]
                 if any(
-                    normalize_title(sec.get("source_title")) in gt_title_set
+                    normalize_title(sec.get("doc_title")) in gt_title_set
                     for sec in secs
                 ):
                     nli_doc_hits[k] += 1
                 if any(
                     (
-                        normalize_title(sec.get("source_title")),
-                        sec.get("section_idx"),
+                        normalize_title(sec.get("doc_title")),
+                        sec.get("section_id"),
                     )
                     in gt_pairs
                     for sec in secs

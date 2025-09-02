@@ -6,9 +6,6 @@ k_value: 10
 m_value: 10
 alpha: 0.9
 search_expand: 200
-first_image_only: false
-use_tfidf_filter: false
-tfidf_ratio: 0.5
 image_device: 0
 # Device placement
 bge_device: 1
@@ -24,7 +21,7 @@ dataset_image_root: /dataset/inaturalist
 dataset_google_root: /dataset/landmarks
 
 dataset_start: 0
-dataset_end: 5750
+dataset_end: 50
 #dataset_start: 0
 #dataset_end: 4750
 

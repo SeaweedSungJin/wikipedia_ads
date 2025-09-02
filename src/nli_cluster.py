@@ -27,7 +27,9 @@ def load_nli_model(
     """Load an NLI model and tokenizer."""
     print(f"Loading NLI model: {model_name}")
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForSequenceClassification.from_pretrained(model_name)
+    model = AutoModelForSequenceClassification.from_pretrained(
+        model_name, torch_dtype=torch.float16
+    )
     model.to(device)
     model.eval()
     return model, tokenizer

@@ -8,8 +8,6 @@ from src.models import load_vlm_model, generate_vlm_answer
 from src.eval import evaluate_example
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
 
 def run_vlm_only_dataset(cfg: Config) -> None:
     dataset = VQADataset(
@@ -22,14 +20,11 @@ def run_vlm_only_dataset(cfg: Config) -> None:
     )
     print(f"데이터셋 평가 범위: start={cfg.dataset_start}, end={cfg.dataset_end}.")
 
-    def _resolve(dev):
-        if isinstance(dev, int):
-            dev = f"cuda:{dev}"
-        if not torch.cuda.is_available() and isinstance(dev, str) and "cuda" in dev:
-            dev = "cpu"
-        return dev
-
-    device = _resolve(cfg.bge_device)
+    device = cfg.bge_device
+    if isinstance(device, int):
+        device = f"cuda:{device}"
+    if not torch.cuda.is_available() and isinstance(device, str) and "cuda" in device:
+        device = "cpu"
     vlm_model, vlm_processor = load_vlm_model(device_map=device)
 
     total = 0

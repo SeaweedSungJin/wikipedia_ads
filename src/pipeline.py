@@ -221,20 +221,7 @@ def search_rag_pipeline(
         elapsed = time.time() - start_time
         return top_k_image_results, [], [], elapsed
 
-    # Optional TF-IDF filtering before expensive embedding comparison
     filtered_sections = all_sections_data
-    if cfg.use_tfidf_filter:
-        print("TF-IDF 필터링 적용중...")
-        texts = [d["section_text"] for d in all_sections_data]
-        vectorizer = TfidfVectorizer().fit(texts + [cfg.text_query])
-        sec_mat = vectorizer.transform(texts)
-        qry_vec = vectorizer.transform([cfg.text_query])
-        scores = cosine_similarity(qry_vec, sec_mat).flatten()
-        keep_n = max(1, int(len(texts) * cfg.tfidf_ratio))
-        top_idx = np.argsort(scores)[-keep_n:]
-        filtered_sections = [all_sections_data[i] for i in top_idx]
-    else:
-        filtered_sections = all_sections_data
 
     if use_contriever:
         # Embed all candidate section texts

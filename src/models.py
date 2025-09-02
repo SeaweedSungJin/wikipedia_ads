@@ -259,9 +259,10 @@ def generate_vlm_answer(
     # Move tensor inputs to the VLM device but keep non-tensors (e.g. image_sizes)
     inputs = {k: (v.to(model.device) if hasattr(v, "to") else v) for k, v in inputs.items()}
     with torch.inference_mode():
-        output = model.generate(
-            **inputs, max_new_tokens=max_new_tokens, do_sample=False, temperature=0.0
-        )
+        with torch.autocast(device_type=model.device.type, dtype=torch.float16):
+            output = model.generate(
+                **inputs, max_new_tokens=max_new_tokens, do_sample=False, temperature=0.0
+            )
     answer = processor.batch_decode(
         output[:, inputs["input_ids"].shape[-1]:], skip_special_tokens=True
     )[0]

@@ -2,6 +2,12 @@
 
 This project implements a retrieval‑augmented pipeline to answer visual questions using Wikipedia. Given a question and its accompanying image, the system retrieves relevant articles via image similarity, segments them into sections, reranks those sections with text models, and selects high‑confidence sections using entropy of BGE cross‑encoder scores.
 
+## Recent Updates
+- Dataset loader iterates with tuple-based rows for lower overhead.
+- NLI and VLM models run in float16 for faster inference and smaller memory use.
+- Evaluation scripts now share a single candidate-section structure and have legacy code removed.
+- Removed deprecated `first_image_only` and TF-IDF filtering options.
+
 ## Pipeline Overview
 1. Precompute EVA‑CLIP embeddings for Wikipedia images and build a FAISS index.
 2. For each query:

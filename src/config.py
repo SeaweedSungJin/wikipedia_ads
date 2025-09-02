@@ -36,13 +36,10 @@ class Config:
     # Which ranking modules to enable
     rerankers: dict = field(default_factory=dict)
 
-    # Optional TF-IDF pre-filtering
-    use_tfidf_filter: bool = False  # Whether to filter sections with TF-IDF
-    tfidf_ratio: float = 0.5  # Ratio of sections to keep when filtering
-    
     # Image search options
-    first_image_only: bool = False  # restrict FAISS search to first image per document
-
+    # Previous options for TF-IDF pre-filtering and restricting FAISS to the first
+    # image per document have been removed for simplicity.
+    
     # Dataset evaluation options
     dataset_csv: str | None = None  # Path to EVQA CSV file
     id2name_paths: list[str] | None = None  # Mapping from image ID to name files

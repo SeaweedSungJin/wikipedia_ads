@@ -255,25 +255,28 @@ class VQADataset:
         """Iterate over VQA samples as :class:`VQASample` objects."""
 
         subset = self.df.iloc[self.start : self.end]
-        for idx, row in tqdm(subset.iterrows(), total=len(subset), desc="VQA samples"):
-            
-            dataset_name = row.get("dataset_name", "inaturalist")
-            ids = self._parse_ids(row.get("dataset_image_ids", ""))
+        for row in tqdm(
+            subset.itertuples(index=True), total=len(subset), desc="VQA samples"
+        ):
+            dataset_name = getattr(row, "dataset_name", "inaturalist")
+            ids = self._parse_ids(getattr(row, "dataset_image_ids", ""))
             image_paths = self._resolve_paths(dataset_name, ids)
 
             if not image_paths:
-                print(f"[Row {idx}] 이미지 경로를 찾을 수 없습니다. 건너뜁니다.")
+                print(f"[Row {row.Index}] 이미지 경로를 찾을 수 없습니다. 건너뜁니다.")
                 continue
 
-            # Yield structured sample for downstream processing
-            metadata = {k: ("" if pd.isna(v) else v) for k, v in row.items()}
+            data = row._asdict()
+            metadata = {k: ("" if pd.isna(v) else v) for k, v in data.items()}
+            metadata.pop("Index", None)
+
             yield VQASample(
-                question=row.get("question", ""),
-                answer=row.get("answer", ""),
+                question=data.get("question", ""),
+                answer=data.get("answer", ""),
                 image_paths=image_paths,
-                row_idx=idx,
+                row_idx=row.Index,
                 metadata=metadata,
-                wikipedia_title=row.get("wikipedia_title", ""),
-                wikipedia_url=row.get("wikipedia_url", ""),
+                wikipedia_title=data.get("wikipedia_title", ""),
+                wikipedia_url=data.get("wikipedia_url", ""),
                 dataset_name=dataset_name,
             )

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import torch
 from tqdm import tqdm
 from src.config import Config
@@ -14,10 +13,6 @@ from src.utils import (
     normalize_title,
     normalize_url_to_title,
 )
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
 
 def run_image_search_dataset(cfg: Config) -> None:
     # --- 1. 데이터 및 모델 로딩 ---
@@ -51,13 +46,6 @@ def run_image_search_dataset(cfg: Config) -> None:
     image_model, image_processor = load_image_model(device_map=dev)
 
     # --- 2. 평가 준비 ---
-
-    # Precompute first image index per document when enforcing first_image_only
-    doc_to_first: dict[int, int] = {}
-    if cfg.first_image_only:
-        for i, d_idx in enumerate(kb_ids):
-            if d_idx not in doc_to_first:
-                doc_to_first[d_idx] = i
 
     base_k = [1, 3, 5, 10]
     k_values = sorted(set([k for k in base_k if k <= cfg.k_value] + [cfg.k_value]))
@@ -95,14 +83,10 @@ def run_image_search_dataset(cfg: Config) -> None:
             print(f"[Row {sample.row_idx}] 이미지 로딩 실패: {e}")
             continue
         
-        # 이미지 임베딩 및
         img_emb = encode_image(img, image_model, image_processor)
-
-        # --- 정규화 코드 추가 ---
         img_emb = img_emb / img_emb.norm(dim=-1, keepdim=True)
-        # ----------------------
 
-        img_emb_np = img_emb.cpu().numpy() # .float() 제거 또는 유지(일관성 확인 필요)
+        img_emb_np = img_emb.cpu().numpy().astype("float32")
         distances, indices = faiss_index.search(img_emb_np, search_k)
 
         # --- 후보군 필터링 및 Recall 계산 ---
@@ -119,11 +103,6 @@ def run_image_search_dataset(cfg: Config) -> None:
             if doc_idx in seen_docs:
                 continue
             
-            if cfg.first_image_only:
-                first_idx = doc_to_first.get(doc_idx)
-                if first_idx is None or first_idx != faiss_vidx:
-                    continue
-            
             if 0 <= doc_idx < len(kb_list):
                 doc = kb_list[doc_idx]
                 title_norm = normalize_title(doc.get("title", ""))
@@ -133,8 +112,6 @@ def run_image_search_dataset(cfg: Config) -> None:
                 top_docs.append(doc)
                 seen_docs.add(doc_idx)
 
-        # Recall 계산
-        retrieved_titles = {normalize_title(doc.get("title")) for doc in top_docs}
         for k in k_values:
             top_k_titles = {normalize_title(doc.get("title")) for doc in top_docs[:k]}
             if not top_k_titles.isdisjoint(gt_titles):
