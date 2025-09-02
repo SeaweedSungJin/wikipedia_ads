@@ -16,8 +16,8 @@ _COLBERT_MODEL = None
 _COLBERT_TOKENIZER = None
 _BGE_MODEL = None
 _BGE_TOKENIZER = None
-_ROBERTA_MODEL = None
-_ROBERTA_TOKENIZER = None
+_ELECTRA_MODEL = None
+_ELECTRA_TOKENIZER = None
 _MPNET_MODEL = None
 _VLM_MODEL = None
 _VLM_PROCESSOR = None
@@ -63,17 +63,17 @@ def load_bge_reranker(model_name: str = "BAAI/bge-reranker-v2-m3", device: str |
         _BGE_MODEL, _BGE_TOKENIZER = model, tokenizer
 
     return _BGE_MODEL, _BGE_TOKENIZER
-    
-    
-def load_roberta_reranker(
-    model_name: str = "FacebookAI/roberta-large-mnli",
+
+
+def load_electra_reranker(
+    model_name: str = "cross-encoder/ms-marco-electra-base",
     device: str | None = None,
 ):
-    """Load a RoBERTa cross-encoder reranker."""
+    """Load an Electra cross-encoder reranker."""
 
-    global _ROBERTA_MODEL, _ROBERTA_TOKENIZER
-    if _ROBERTA_MODEL is None or _ROBERTA_TOKENIZER is None:
-        print("RoBERTa cross-encoder 모델 로딩중...")
+    global _ELECTRA_MODEL, _ELECTRA_TOKENIZER
+    if _ELECTRA_MODEL is None or _ELECTRA_TOKENIZER is None:
+        print("Electra cross-encoder 모델 로딩중...")
         from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
         model = AutoModelForSequenceClassification.from_pretrained(model_name)
@@ -81,9 +81,9 @@ def load_roberta_reranker(
         if device:
             model.to(device)
         model.eval()
-        _ROBERTA_MODEL, _ROBERTA_TOKENIZER = model, tokenizer
+        _ELECTRA_MODEL, _ELECTRA_TOKENIZER = model, tokenizer
 
-    return _ROBERTA_MODEL, _ROBERTA_TOKENIZER
+    return _ELECTRA_MODEL, _ELECTRA_TOKENIZER
 
 
 def load_mpnet_biencoder(
@@ -98,6 +98,7 @@ def load_mpnet_biencoder(
         _MPNET_MODEL = SentenceTransformer(model_name, device=device or get_device())
 
     return _MPNET_MODEL
+
 
 def jina_encode(model, query: str | None = None, image: str | None = None):
     """Return a multimodal embedding using the Jina reranker model."""

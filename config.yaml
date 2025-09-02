@@ -1,4 +1,4 @@
-base_path: /data/dataset/evqa
+base_path: /dataset/evqa
 image_path: datasets/real_images/Downside_Abbey.jpg
 kb_json_name: encyclopedic_kb_wiki.json
 text_query: Who built the choir at this abbey?
@@ -11,17 +11,17 @@ image_device: 0
 bge_device: 1
 nli_device: 2
 nli_batch_size: 32
-dataset_csv: /data/dataset/evqa/test.csv
+dataset_csv: /dataset/evqa/test.csv
 id2name_paths: 
-  - /data/dataset/inaturalist/train_id2name.json
-  - /data/dataset/inaturalist/val_id2name.json
-  - /data/dataset/inaturalist/test_id2name.json
-  - /data/dataset/inaturalist/public_test_id2name.json
-dataset_image_root: /data/dataset/inaturalist
-dataset_google_root: /data/dataset/landmarks
+  - /dataset/inaturalist/train_id2name.json
+  - /dataset/inaturalist/val_id2name.json
+  - /dataset/inaturalist/test_id2name.json
+  - /dataset/inaturalist/public_test_id2name.json
+dataset_image_root: /dataset/inaturalist
+dataset_google_root: /dataset/landmarks
 
 dataset_start: 0
-dataset_end: 50
+dataset_end: 5
 #dataset_start: 0
 #dataset_end: 4750
 
@@ -32,9 +32,12 @@ chunk_size: 1024
 bge_model: BAAI/bge-reranker-large
 bge_max_length: 512 # ✅ 추가
 bge_conf_threshold: 0.3
-roberta_model: FacebookAI/roberta-large-mnli
-mpnet_model: sentence-transformers/all-mpnet-base-v2
-nli_model: tasksource/deberta-base-long-nli
+electra_model: cross-encoder/ms-marco-electra-base
+mpnet_model: sentence-transformers/all-mpnet-base-v2 #bi-encoder
+
+deberta_nli_model: tasksource/deberta-base-long-nli
+roberta_nli_model: FacebookAI/roberta-large-mnli
+deberta_v3_nli_model: microsoft/deberta-large-mnli
 #nli_model: MoritzLaurer/DeBERTa-v3-large-mnli-fever-anli-ling-wanli
 nli_max_length: 1024
 nli_max_cluster: 3
@@ -43,10 +46,16 @@ nli_margin: 0.2 #ent-con 점수가 이거보다 낮으면 탈락 #0.0 #기존 0.
 nli_tau: 0.20 #α * 내포 - β * 모순 점수가 이거보다 낮음 탈락, 지금αβ는 둘다 1
 nli_lambda: 0.7 
 
+# NLI model selection
+nli_models:
+  deberta: false
+  roberta: false
+  deberta_v3: true
+
 # Reranker settings
 rerankers:
   contriever: false
   jina_m0: false
-  bge: false
-  roberta: true
+  bge: true
+  electra: false
   mpnet: false

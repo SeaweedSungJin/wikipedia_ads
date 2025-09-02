@@ -30,7 +30,16 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
         return torch.device(dev)
 
     device = _resolve(cfg.nli_device)
-    model, tokenizer = load_nli_model(cfg.nli_model, device)
+    nli_choice = cfg.nli_models.get
+    if nli_choice("deberta", False):
+        model_name = cfg.deberta_nli_model
+    elif nli_choice("roberta", False):
+        model_name = cfg.roberta_nli_model
+    elif nli_choice("deberta_v3", False):
+        model_name = cfg.deberta_v3_nli_model
+    else:
+        model_name = cfg.deberta_nli_model
+    model, tokenizer = load_nli_model(model_name, device)
     vlm_model, vlm_processor = load_vlm_model(device_map=cfg.bge_device)
     print(
         "NLI clustering mode: clique-weighted (ent-contr) using e_min/margin/tau"

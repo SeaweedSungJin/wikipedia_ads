@@ -25,10 +25,14 @@ class Config:
     chunk_size: int = 1024  # Maximum characters per segment when splitting
     bge_max_length: int = 512
     bge_model: str = "BAAI/bge-reranker-v2-m3"  # BGE reranker model name
-    roberta_model: str = "FacebookAI/roberta-large-mnli"  # Cross-encoder model
+    electra_model: str = "cross-encoder/ms-marco-electra-base"  # Cross-encoder model
     mpnet_model: str = "sentence-transformers/all-mpnet-base-v2"  # Bi-encoder model
     bge_conf_threshold: float = 0.5  # Confidence threshold for reranker scores
-    nli_model: str = "MoritzLaurer/DeBERTa-v3-base-mnli"  # NLI model for clustering
+    # NLI model names
+    deberta_nli_model: str = "tasksource/deberta-base-long-nli"
+    roberta_nli_model: str = "FacebookAI/roberta-large-mnli"
+    deberta_v3_nli_model: str = "microsoft/deberta-v3-large"
+    nli_models: dict = field(default_factory=dict)  # Which NLI model to use
     nli_max_length: int = 512  # Max tokens per NLI input pair
     nli_max_cluster: int = 3  # Max sections per NLI cluster
     nli_e_min: float = 0.5  # Entailment minimum for graph edges
@@ -41,7 +45,7 @@ class Config:
     # Image search options
     # Previous options for TF-IDF pre-filtering and restricting FAISS to the first
     # image per document have been removed for simplicity.
-    
+
     # Dataset evaluation options
     dataset_csv: str | None = None  # Path to EVQA CSV file
     id2name_paths: list[str] | None = None  # Mapping from image ID to name files
@@ -84,6 +88,8 @@ class Config:
 
         if "rerankers" not in data:
             data["rerankers"] = {}
+        if "nli_models" not in data:
+            data["nli_models"] = {}
 
         # Ignore any unexpected keys instead of raising a TypeError
         valid_fields = set(cls.__dataclass_fields__)

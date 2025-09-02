@@ -24,7 +24,7 @@ from .models import (
     load_jina_reranker,
     setup_cuda,
     load_bge_reranker,
-    load_roberta_reranker,
+    load_electra_reranker,
     load_mpnet_biencoder,
 )
 from .encoders import TextEncoder
@@ -88,7 +88,7 @@ def search_rag_pipeline(
     use_contriever = cfg.rerankers.get("contriever", False)
     use_jina = cfg.rerankers.get("jina_m0", False)
     use_bge = cfg.rerankers.get("bge", False)
-    use_roberta = cfg.rerankers.get("roberta", False)
+    use_electra = cfg.rerankers.get("electra", False)
     use_mpnet = cfg.rerankers.get("mpnet", False)
 
     if text_encoder is None and use_contriever:
@@ -126,7 +126,6 @@ def search_rag_pipeline(
     # Encode the query image and search the FAISS index
     img = load_image(cfg.image_path)
     img_emb = encode_image(img, image_model, image_processor)
-
     img_emb_np = img_emb.numpy().astype("float32")
     # Re-normalise in case of numeric drift after conversion
     img_emb_np /= np.linalg.norm(img_emb_np, axis=1, keepdims=True)
@@ -288,17 +287,17 @@ def search_rag_pipeline(
         for sec, score in zip(filtered_sections, all_scores):
             sec["similarity"] = float(score)
 
-    if use_roberta:
+    if use_electra:
         ce_dev = (
             f"cuda:{cfg.bge_device}" if isinstance(cfg.bge_device, int) else cfg.bge_device
         )
         if not torch.cuda.is_available() and isinstance(ce_dev, str) and "cuda" in ce_dev:
             ce_dev = "cpu"
-        model, tokenizer = load_roberta_reranker(cfg.roberta_model, ce_dev)
+        model, tokenizer = load_electra_reranker(cfg.electra_model, ce_dev)
         ce_batch_size = 32
         all_scores = []
-        print(f"RoBERTa Reranking {len(filtered_sections)} sections in batches of {ce_batch_size}...")
-        for i in tqdm(range(0, len(filtered_sections), ce_batch_size), desc="RoBERTa Reranking"):
+        print(f"Electra Reranking {len(filtered_sections)} sections in batches of {ce_batch_size}...")
+        for i in tqdm(range(0, len(filtered_sections), ce_batch_size), desc="Electra Reranking"):
             batch_sections = filtered_sections[i:i + ce_batch_size]
             pairs = [[cfg.text_query, s["section_text"]] for s in batch_sections]
             if not pairs:
@@ -312,7 +311,20 @@ def search_rag_pipeline(
             ).to(ce_dev)
             with torch.no_grad():
                 logits = model(**inputs, return_dict=True).logits
-                batch_scores = logits[:, 2].cpu().float()  # entailment score
+                # Support both regression/binary and 3-class NLI heads.
+                # - Regression (e.g. MS MARCO cross-encoders): shape [B, 1]
+                # - Binary classification: shape [B, 2] (use positive class)
+                # - NLI 3-way classification: shape [B, 3] (use entailment = idx 2)
+                if logits.ndim == 2 and logits.shape[1] == 1:
+                    batch_scores = logits.view(-1).cpu().float()
+                elif logits.ndim == 2 and logits.shape[1] == 2:
+                    batch_scores = logits[:, 1].cpu().float()
+                elif logits.ndim == 2 and logits.shape[1] >= 3:
+                    batch_scores = logits[:, 2].cpu().float()
+                else:
+                    raise ValueError(
+                        f"Unexpected Electra logits shape: {tuple(logits.shape)}"
+                    )
                 all_scores.extend(batch_scores.tolist())
         for sec, score in zip(filtered_sections, all_scores):
             sec["similarity"] = float(score)
@@ -355,7 +367,7 @@ def search_rag_pipeline(
         # Only consider the top-M sections when computing confidence
         top_m_sections = sorted_sections[: cfg.m_value]
 
-        if (use_bge or use_roberta or use_mpnet) and top_m_sections:
+        if (use_bge or use_electra or use_mpnet) and top_m_sections:
             score_tensor = torch.tensor([s["similarity"] for s in top_m_sections])
             probs = torch.softmax(score_tensor, dim=0).tolist()
             for sec, prob in zip(top_m_sections, probs):

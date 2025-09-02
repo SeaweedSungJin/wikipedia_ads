@@ -27,12 +27,37 @@ def load_nli_model(
     """Load an NLI model and tokenizer."""
     print(f"Loading NLI model: {model_name}")
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForSequenceClassification.from_pretrained(
-        model_name, torch_dtype=torch.float16
-    )
+    # Avoid forcing FP16; some checkpoints (e.g., DeBERTa MNLI) mix dtypes
+    # internally and error out when weights are half precision. Default to
+    # the model's native dtype and rely on autocast if needed by callers.
+    model = AutoModelForSequenceClassification.from_pretrained(model_name)
     model.to(device)
     model.eval()
     return model, tokenizer
+
+
+def _effective_max_length(tokenizer, model, requested: int) -> int:
+    """Return a safe max_length based on tokenizer/model limits.
+
+    Some models (e.g., RoBERTa) have ``max_position_embeddings`` around 514 and
+    tokenizers commonly expose ``model_max_length`` as 512, whereas others (e.g.,
+    long-range DeBERTa) support 1024+. This helper caps the requested length to
+    what the tokenizer/model can handle to avoid runtime shape errors.
+    """
+    tok_max = getattr(tokenizer, "model_max_length", None)
+    # Guard against tokenizers that set a sentinel very large number
+    if tok_max is None or tok_max > 1_000_000:
+        tok_max = None
+    model_max = getattr(getattr(model, "config", None), "max_position_embeddings", None)
+    candidates = [requested]
+    if isinstance(tok_max, int) and tok_max > 0:
+        candidates.append(tok_max)
+    if isinstance(model_max, int) and model_max > 0:
+        # ``max_position_embeddings`` counts positions including specials; the
+        # tokenizer's ``max_length`` already includes specials, so taking the
+        # minimum is safe without manual offsets.
+        candidates.append(model_max)
+    return int(min(candidates))
 
 
 # ---------------------------------------------------------------------------
@@ -57,12 +82,13 @@ def nli_relation(
     """
 
     def _probs(premise: str, hypothesis: str) -> torch.Tensor:
+        eff_max_len = _effective_max_length(tokenizer, model, max_length)
         inputs = tokenizer(
             premise,
             hypothesis,
             return_tensors="pt",
             truncation=True,
-            max_length=max_length,
+            max_length=eff_max_len,
         ).to(device)
         with torch.no_grad():
             return model(**inputs).logits.softmax(dim=1)[0]
@@ -83,12 +109,13 @@ def _nli_probs(
 ) -> torch.Tensor:
     """Return NLI probabilities (contradiction, neutral, entailment)."""
 
+    eff_max_len = _effective_max_length(tokenizer, model, max_length)
     inputs = tokenizer(
         premise,
         hypothesis,
         return_tensors="pt",
         truncation=True,
-        max_length=max_length,
+        max_length=eff_max_len,
     ).to(device)
     with torch.no_grad():
         return model(**inputs).logits.softmax(dim=1)[0]
@@ -132,12 +159,13 @@ def build_relation_graph(
         batch = pairs[start : start + batch_size]
         premises = [texts[i] for i, _ in batch]
         hypotheses = [texts[j] for _, j in batch]
+        eff_max_len = _effective_max_length(tokenizer, model, max_length)
         inputs1 = tokenizer(
             premises,
             hypotheses,
             return_tensors="pt",
             truncation=True,
-            max_length=max_length,
+            max_length=eff_max_len,
             padding=True,
         ).to(device)
         inputs2 = tokenizer(
@@ -145,7 +173,7 @@ def build_relation_graph(
             premises,
             return_tensors="pt",
             truncation=True,
-            max_length=max_length,
+            max_length=eff_max_len,
             padding=True,
         ).to(device)
         probs1 = model(**inputs1).logits.softmax(dim=1)
