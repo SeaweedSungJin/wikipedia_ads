@@ -25,7 +25,9 @@ class Config:
     chunk_size: int = 1024  # Maximum characters per segment when splitting
     bge_max_length: int = 512
     bge_model: str = "BAAI/bge-reranker-v2-m3"  # BGE reranker model name
-    bge_conf_threshold: float = 0.5  # Confidence threshold for BGE scores
+    roberta_model: str = "FacebookAI/roberta-large-mnli"  # Cross-encoder model
+    mpnet_model: str = "sentence-transformers/all-mpnet-base-v2"  # Bi-encoder model
+    bge_conf_threshold: float = 0.5  # Confidence threshold for reranker scores
     nli_model: str = "MoritzLaurer/DeBERTa-v3-base-mnli"  # NLI model for clustering
     nli_max_length: int = 512  # Max tokens per NLI input pair
     nli_max_cluster: int = 3  # Max sections per NLI cluster

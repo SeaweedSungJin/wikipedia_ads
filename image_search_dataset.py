@@ -14,6 +14,7 @@ from src.utils import (
     normalize_url_to_title,
 )
 
+
 def run_image_search_dataset(cfg: Config) -> None:
     # --- 1. 데이터 및 모델 로딩 ---
 
@@ -71,6 +72,7 @@ def run_image_search_dataset(cfg: Config) -> None:
         for url in gt_urls_raw:
             if url.strip():
                 gt_titles.add(normalize_url_to_title(url))
+        # --- 수정 완료 ---
 
         if not gt_titles:
             continue

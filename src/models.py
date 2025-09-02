@@ -16,6 +16,9 @@ _COLBERT_MODEL = None
 _COLBERT_TOKENIZER = None
 _BGE_MODEL = None
 _BGE_TOKENIZER = None
+_ROBERTA_MODEL = None
+_ROBERTA_TOKENIZER = None
+_MPNET_MODEL = None
 _VLM_MODEL = None
 _VLM_PROCESSOR = None
 
@@ -26,6 +29,7 @@ from transformers import (
     CLIPImageProcessor,
     BitsAndBytesConfig,
 )
+from sentence_transformers import SentenceTransformer
 
 def load_jina_reranker(device: str | None = None):
     """Load the Jina cross-encoder reranker model."""
@@ -59,6 +63,41 @@ def load_bge_reranker(model_name: str = "BAAI/bge-reranker-v2-m3", device: str |
         _BGE_MODEL, _BGE_TOKENIZER = model, tokenizer
 
     return _BGE_MODEL, _BGE_TOKENIZER
+    
+    
+def load_roberta_reranker(
+    model_name: str = "FacebookAI/roberta-large-mnli",
+    device: str | None = None,
+):
+    """Load a RoBERTa cross-encoder reranker."""
+
+    global _ROBERTA_MODEL, _ROBERTA_TOKENIZER
+    if _ROBERTA_MODEL is None or _ROBERTA_TOKENIZER is None:
+        print("RoBERTa cross-encoder 모델 로딩중...")
+        from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
+        model = AutoModelForSequenceClassification.from_pretrained(model_name)
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        if device:
+            model.to(device)
+        model.eval()
+        _ROBERTA_MODEL, _ROBERTA_TOKENIZER = model, tokenizer
+
+    return _ROBERTA_MODEL, _ROBERTA_TOKENIZER
+
+
+def load_mpnet_biencoder(
+    model_name: str = "sentence-transformers/all-mpnet-base-v2",
+    device: str | None = None,
+):
+    """Load a SentenceTransformer bi-encoder model."""
+
+    global _MPNET_MODEL
+    if _MPNET_MODEL is None:
+        print("MPNet bi-encoder 모델 로딩중...")
+        _MPNET_MODEL = SentenceTransformer(model_name, device=device or get_device())
+
+    return _MPNET_MODEL
 
 def jina_encode(model, query: str | None = None, image: str | None = None):
     """Return a multimodal embedding using the Jina reranker model."""
