@@ -129,6 +129,8 @@ def build_relation_graph(
     margin: float = 0.15,
     tau: float = 0.25,
     batch_size: int = 32,
+    edge_rule: str = "avg",
+    dir_margin: float = 0.0,
 ) -> Tuple[List[Set[int]], List[List[float]], dict]:
     """Construct a weighted graph of section pairs based on NLI probabilities.
 
@@ -171,14 +173,37 @@ def build_relation_graph(
         ).to(device)
         probs1 = model(**inputs1).logits.softmax(dim=1)
         probs2 = model(**inputs2).logits.softmax(dim=1)
-        probs = (probs1 + probs2) / 2
-        ents = probs[:, 2].cpu().tolist()
-        contrs = probs[:, 0].cpu().tolist()
-        label_ids = torch.argmax(probs, dim=1).cpu().tolist()
-        for (i, j), ent, contr, lid in zip(batch, ents, contrs, label_ids):
+
+        # Average (symmetric) probabilities
+        probs_avg = (probs1 + probs2) / 2
+
+        # Directional deltas (entailment - contradiction) per orientation
+        ent1 = probs1[:, 2]
+        contr1 = probs1[:, 0]
+        ent2 = probs2[:, 2]
+        contr2 = probs2[:, 0]
+        d1 = ent1 - contr1
+        d2 = ent2 - contr2
+
+        # Averaged values for legacy thresholds
+        ent_avg = probs_avg[:, 2]
+        contr_avg = probs_avg[:, 0]
+        deltas_avg = ent_avg - contr_avg
+
+        label_ids = torch.argmax(probs_avg, dim=1).cpu().tolist()
+
+        ents = ent_avg.cpu().tolist()
+        contrs = contr_avg.cpu().tolist()
+
+        for idx, ((i, j), ent, contr, lid) in enumerate(zip(batch, ents, contrs, label_ids)):
             stats[labels[lid]] += 1
+            # Legacy averaged gating
             if ent < e_min or (ent - contr) < margin:
                 continue
+            # Optional bidirectional minimum on directional (ent-contr)
+            if edge_rule == "both_dir":
+                if d1[idx].item() < dir_margin or d2[idx].item() < dir_margin:
+                    continue
             weight = alpha * ent - beta * contr
             weight = max(0.0, weight)
             if clamp_weights:
@@ -233,6 +258,8 @@ def cluster_sections_clique(
     margin: float = 0.15,
     tau: float = 0.25,
     batch_size: int = 32,
+    edge_rule: str = "avg",
+    dir_margin: float = 0.0,
 ) -> Tuple[List[dict], dict]:
     """Cluster sections by finding maximal cliques with weighted edges.
 
@@ -259,6 +286,8 @@ def cluster_sections_clique(
         margin=margin,
         tau=tau,
         batch_size=batch_size,
+        edge_rule=edge_rule,
+        dir_margin=dir_margin,
     )
 
     # normalize BGE similarities to [0,1] so they can be blended with edge weights

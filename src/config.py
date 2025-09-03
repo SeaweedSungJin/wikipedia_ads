@@ -39,6 +39,10 @@ class Config:
     nli_margin: float = 0.15  # Entailment-contradiction margin for edges
     nli_tau: float = 0.25  # Weight cutoff for retaining edges
     nli_lambda: float = 0.7  # Blend weight between BGE and edge coherence
+    # NLI edge rule: 'avg' (default) or 'both_dir'
+    nli_edge_rule: str = "avg"
+    # Minimum (entailment - contradiction) required in each direction when using 'both_dir'
+    nli_dir_margin: float = 0.0
     # Which ranking modules to enable
     rerankers: dict = field(default_factory=dict)
 

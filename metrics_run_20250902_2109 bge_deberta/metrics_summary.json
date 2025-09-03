@@ -1,0 +1,110 @@
+{
+  "stages": {
+    "image_search": {
+      "count_effective": 5740,
+      "latency": {
+        "mean": 2.6732018252930407,
+        "std": 0.4505278721224426,
+        "p50": 2.414909875486046,
+        "p90": 3.2975208642426876,
+        "p99": 4.005548962657336
+      },
+      "peak_vram_gb": {
+        "mean": 15.348944664001465,
+        "max": 15.348944664001465
+      },
+      "energy_J": {
+        "mean": 345.74903666845034,
+        "sum": 1984599.470476905
+      }
+    },
+    "nli": {
+      "count_effective": 5740,
+      "latency": {
+        "mean": 2.2548478894742883,
+        "std": 0.8684477197323673,
+        "p50": 2.5085554886609316,
+        "p90": 3.1478842600248753,
+        "p99": 3.236030836794525
+      },
+      "peak_vram_gb": {
+        "mean": 7.503717314324728,
+        "max": 9.972647666931152
+      },
+      "energy_J": {
+        "mean": 507.6978870606034,
+        "sum": 2914185.871727864
+      }
+    },
+    "reranker": {
+      "count_effective": 5740,
+      "latency": {
+        "mean": 0.0005743225034527507,
+        "std": 0.0001272933605345216,
+        "p50": 0.000565607100725174,
+        "p90": 0.000638792756944895,
+        "p99": 0.001040026945993304
+      },
+      "peak_vram_gb": {
+        "mean": 16.188572883605957,
+        "max": 16.188572883605957
+      },
+      "energy_J": {
+        "mean": 0.06328215787890916,
+        "sum": 363.2395862249386
+      }
+    }
+  },
+  "accuracy": {
+    "image_search": {
+      "recall@1": 954,
+      "recall@3": 1576,
+      "recall@5": 2008,
+      "recall@10": 2474
+    },
+    "reranker": {
+      "doc_recall@1": 1421,
+      "doc_recall@3": 1890,
+      "doc_recall@5": 2105,
+      "doc_recall@10": 2320,
+      "sec_recall@1": 945,
+      "sec_recall@3": 1289,
+      "sec_recall@5": 1477,
+      "sec_recall@10": 1672,
+      "MRR@10": null
+    },
+    "nli": {
+      "doc_recall@1": 1475,
+      "doc_recall@3": 1960,
+      "doc_recall@5": 2159,
+      "doc_recall@10": 2313,
+      "sec_recall@1": 975,
+      "sec_recall@3": 1338,
+      "sec_recall@5": 1516,
+      "sec_recall@10": 1664,
+      "edge_precision": null,
+      "edge_recall": null,
+      "edge_f1": null
+    },
+    "e2e_accuracy": 0.2257391304347826,
+    "samples_total": 5750
+  },
+  "environment": {
+    "torch_version": "2.7.0+cu126",
+    "cuda_available": "True",
+    "cuda_version": "12.6",
+    "device_count": "4",
+    "gpu_name": "NVIDIA GeForce RTX 3090",
+    "gpu_capability": "(8, 6)",
+    "driver": "",
+    "dtype": "native",
+    "seed": 42,
+    "pctl": [
+      50,
+      90,
+      99
+    ],
+    "warmup_steps": 10,
+    "nvml_poll_ms": 50
+  }
+}

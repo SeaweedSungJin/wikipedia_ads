@@ -23,8 +23,21 @@ class Reranker:
         raise NotImplementedError
 
 
+def _device_index(device: str | int | torch.device) -> int | None:
+    if isinstance(device, int):
+        return device
+    if isinstance(device, torch.device):
+        device = str(device)
+    if isinstance(device, str) and "cuda" in device:
+        try:
+            return int(device.split(":")[1]) if ":" in device else 0
+        except Exception:
+            return None
+    return None
+
+
 class BGEReranker(Reranker):
-    def __init__(self, model_name: str, device: str | int = "cpu", max_length: int = 512, batch_size: int = 32):
+    def __init__(self, model_name: str, device: str | int = "cpu", max_length: int = 512, batch_size: int = 64):
         dev = f"cuda:{device}" if isinstance(device, int) else device
         if not torch.cuda.is_available() and isinstance(dev, str) and "cuda" in dev:
             dev = "cpu"
@@ -49,6 +62,16 @@ class BGEReranker(Reranker):
                 max_length=self.max_length,
             ).to(self.device)
             logits = self.model(**inputs, return_dict=True).logits
+            # Ensure GPU work is accounted for in timing when measured outside
+            if torch.cuda.is_available():
+                idx = _device_index(self.device)
+                try:
+                    if idx is not None:
+                        torch.cuda.synchronize(idx)
+                    else:
+                        torch.cuda.synchronize()
+                except Exception:
+                    pass
             scores.extend(logits.view(-1).cpu().float().tolist())
         return scores
 
@@ -79,6 +102,15 @@ class ElectraReranker(Reranker):
                 max_length=self.max_length,
             ).to(self.device)
             logits = self.model(**inputs, return_dict=True).logits
+            if torch.cuda.is_available():
+                idx = _device_index(self.device)
+                try:
+                    if idx is not None:
+                        torch.cuda.synchronize(idx)
+                    else:
+                        torch.cuda.synchronize()
+                except Exception:
+                    pass
             if logits.ndim == 2 and logits.shape[1] == 1:
                 batch_scores = logits.view(-1)
             elif logits.ndim == 2 and logits.shape[1] == 2:
@@ -106,4 +138,3 @@ class JinaReranker(Reranker):
         scores = self.model.compute_score(pairs, max_length=8192, doc_type="text")
         # compute_score may return a list of floats; normalize type
         return [float(s) for s in scores]
-

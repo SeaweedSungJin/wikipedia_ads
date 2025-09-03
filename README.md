@@ -56,6 +56,22 @@ pip install -r requirements.txt
 python bge_nli_graph_dataset.py
 # Evaluate image only
 python image_search_dataset.py
+# Collect per-stage performance metrics (latency/VRAM/energy) with warmup exclusion
+python metric_dataset.py --warmup_steps 10 --nvml_poll_ms 50 --no_vlm
 ```
 
 `config.yaml` contains `dataset_start` and `dataset_end` to limit the portion of the EVQA dataset evaluated. Leave them blank to process the full test set.
+
+## Metrics Runner
+
+`metric_dataset.py` runs the same pipeline while measuring per-sample, per-stage metrics and saving:
+
+- `metrics_samples.csv`: one row per sample per stage with fields `sample_id,stage,latency_s,peak_vram_gb,energy_J,is_warmup`.
+- `metrics_summary.json`: aggregated stats per stage (mean/std and p50/p90/p99 latency, mean/max VRAM, mean/sum energy), accuracy (image/reranker/NLI recalls; optional end-to-end), and environment info (GPU, CUDA, torch, dtype, seed, warmup, percentiles).
+
+Stages:
+- `image_search`: EVA-CLIP embedding + FAISS search
+- `reranker`: text reranking (BGE/Electra/Jina)
+- `nli`: pairwise NLI graph + clique selection
+
+Warmup policy: the first `--warmup_steps` samples are marked `is_warmup=1` and excluded from resource aggregation but still counted toward accuracy metrics.

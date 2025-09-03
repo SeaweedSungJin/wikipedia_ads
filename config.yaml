@@ -5,12 +5,12 @@ text_query: Who built the choir at this abbey?
 k_value: 10
 m_value: 10
 alpha: 0.9
-search_expand: 200
+search_expand: 20 # lisf of 같은거 처리용, 이미지 과샘플링
 image_device: 0
 # Device placement
 bge_device: 1
 nli_device: 2
-nli_batch_size: 32
+nli_batch_size: 64
 dataset_csv: /dataset/evqa/test.csv
 id2name_paths: 
   - /dataset/inaturalist/train_id2name.json
@@ -21,7 +21,7 @@ dataset_image_root: /dataset/inaturalist
 dataset_google_root: /dataset/landmarks
 
 dataset_start: 0
-dataset_end: 5
+dataset_end: 5750
 #dataset_start: 0
 #dataset_end: 4750
 
@@ -59,3 +59,7 @@ rerankers:
   bge: false
   electra: true
   mpnet: false
+
+#양방향 실험용
+  nli_edge_rule: both_dir #both_dir or avg
+  nli_dir_margin: 0.15 #0.0이면 무시됨

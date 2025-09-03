@@ -7,7 +7,7 @@ module level so that repeated calls do not incur additional load time.
 
 from __future__ import annotations
 
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Callable, ContextManager, Optional
 import math
 import time
 import numpy as np
@@ -67,6 +67,7 @@ def search_rag_pipeline(
     text_encoder: TextEncoder | None = None,
     segmenter: Segmenter | None = None,
     use_all_sections: bool = False,
+    stage_meter_factory: Optional[Callable[[str], ContextManager]] = None,
 ) -> Tuple[List[dict], List[dict], List[dict], float]:
     """Execute the RAG search pipeline.
 
@@ -122,17 +123,23 @@ def search_rag_pipeline(
             doc_idx_starts[doc_idx] = i
 
     # Encode the query image and search the FAISS index
-    img = load_image(cfg.image_path)
-    img_emb = encode_image(img, image_model, image_processor)
-    img_emb_np = img_emb.numpy().astype("float32")
-    # Re-normalise in case of numeric drift after conversion
-    img_emb_np /= np.linalg.norm(img_emb_np, axis=1, keepdims=True)
+    if stage_meter_factory:
+        img_stage = stage_meter_factory("image_search")
+    else:
+        from contextlib import nullcontext
+        img_stage = nullcontext()
+    with img_stage:
+        img = load_image(cfg.image_path)
+        img_emb = encode_image(img, image_model, image_processor)
+        img_emb_np = img_emb.numpy().astype("float32")
+        # Re-normalise in case of numeric drift after conversion
+        img_emb_np /= np.linalg.norm(img_emb_np, axis=1, keepdims=True)
 
-    # Retrieve more candidates than needed so that filtered pages
-    # (e.g., "list of" or "outline of" entries) can be skipped
-    expand = cfg.search_expand if cfg.search_expand is not None else cfg.k_value * 20
-    search_k = min(expand, faiss_index.ntotal)
-    distances, indices = faiss_index.search(img_emb_np, k=search_k)
+        # Retrieve more candidates than needed so that filtered pages
+        # (e.g., "list of" or "outline of" entries) can be skipped
+        expand = cfg.search_expand if cfg.search_expand is not None else cfg.k_value * 20
+        search_k = min(expand, faiss_index.ntotal)
+        distances, indices = faiss_index.search(img_emb_np, k=search_k)
 
     # Collect top-K image search results using the evaluate_pipeline logic
     top_k_image_results: List[dict] = []
@@ -238,11 +245,14 @@ def search_rag_pipeline(
                         best_score = score
             filtered_sections[i]["similarity"] = best_score
 
-    if use_jina:
-        reranker = JinaReranker(device=cfg.bge_device)
-        scores = reranker.score(cfg.text_query, [s["section_text"] for s in filtered_sections])
-        for sec, score in zip(filtered_sections, scores):
-            sec["similarity"] = float(score)
+    # Reranker stage wrapper (encompasses any enabled reranker)
+    def _apply_rerankers():
+        nonlocal filtered_sections
+        if use_jina:
+            reranker = JinaReranker(device=cfg.bge_device)
+            scores = reranker.score(cfg.text_query, [s["section_text"] for s in filtered_sections])
+            for sec, score in zip(filtered_sections, scores):
+                sec["similarity"] = float(score)
 
     if use_bge:
         bge_dev = (
@@ -267,6 +277,14 @@ def search_rag_pipeline(
         scores = reranker.score(cfg.text_query, [s["section_text"] for s in filtered_sections])
         for sec, score in zip(filtered_sections, scores):
             sec["similarity"] = float(score)
+
+    # Apply rerankers inside a stage meter if provided
+    if stage_meter_factory and (use_jina or use_bge or use_electra or use_mpnet):
+        from contextlib import nullcontext
+        with stage_meter_factory("reranker"):
+            _apply_rerankers()
+    else:
+        _apply_rerankers()
 
     if use_mpnet:
         mpnet_dev = (
