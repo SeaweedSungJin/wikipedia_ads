@@ -24,8 +24,10 @@ class Config:
     segment_level: str = "section"  # "section", "paragraph" or "sentence"
     chunk_size: int = 1024  # Maximum characters per segment when splitting
     bge_max_length: int = 512
+    bge_batch_size: int = 32
     bge_model: str = "BAAI/bge-reranker-v2-m3"  # BGE reranker model name
     electra_model: str = "cross-encoder/ms-marco-electra-base"  # Cross-encoder model
+    electra_batch_size: int = 32
     mpnet_model: str = "sentence-transformers/all-mpnet-base-v2"  # Bi-encoder model
     bge_conf_threshold: float = 0.5  # Confidence threshold for reranker scores
     # NLI model names
@@ -43,6 +45,9 @@ class Config:
     nli_edge_rule: str = "avg"
     # Minimum (entailment - contradiction) required in each direction when using 'both_dir'
     nli_dir_margin: float = 0.0
+    # NLI performance knobs (autocast only; bidirectional/topk removed for stability)
+    nli_autocast: bool = True  # Use torch.autocast for faster NLI matmuls
+    nli_autocast_dtype: str = "fp16"  # 'fp16' or 'bf16'
     # Which ranking modules to enable
     rerankers: dict = field(default_factory=dict)
 

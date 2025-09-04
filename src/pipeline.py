@@ -260,8 +260,8 @@ def search_rag_pipeline(
         )
         if not torch.cuda.is_available() and isinstance(bge_dev, str) and "cuda" in bge_dev:
             bge_dev = "cpu"
-        reranker = BGEReranker(cfg.bge_model, device=cfg.bge_device, max_length=cfg.bge_max_length, batch_size=32)
-        print(f"BGE Reranking {len(filtered_sections)} sections in batches of 32...")
+        reranker = BGEReranker(cfg.bge_model, device=cfg.bge_device, max_length=cfg.bge_max_length, batch_size=cfg.bge_batch_size)
+        print(f"BGE Reranking {len(filtered_sections)} sections in batches of {cfg.bge_batch_size}...")
         scores = reranker.score(cfg.text_query, [s["section_text"] for s in filtered_sections])
         for sec, score in zip(filtered_sections, scores):
             sec["similarity"] = float(score)
@@ -272,8 +272,8 @@ def search_rag_pipeline(
         )
         if not torch.cuda.is_available() and isinstance(ce_dev, str) and "cuda" in ce_dev:
             ce_dev = "cpu"
-        reranker = ElectraReranker(cfg.electra_model, device=cfg.bge_device, max_length=cfg.bge_max_length, batch_size=32)
-        print(f"Electra Reranking {len(filtered_sections)} sections in batches of 32...")
+        reranker = ElectraReranker(cfg.electra_model, device=cfg.bge_device, max_length=cfg.bge_max_length, batch_size=cfg.electra_batch_size)
+        print(f"Electra Reranking {len(filtered_sections)} sections in batches of {cfg.electra_batch_size}...")
         scores = reranker.score(cfg.text_query, [s["section_text"] for s in filtered_sections])
         for sec, score in zip(filtered_sections, scores):
             sec["similarity"] = float(score)

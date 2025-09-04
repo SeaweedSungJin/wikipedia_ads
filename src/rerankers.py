@@ -61,7 +61,11 @@ class BGEReranker(Reranker):
                 return_tensors="pt",
                 max_length=self.max_length,
             ).to(self.device)
-            logits = self.model(**inputs, return_dict=True).logits
+            if torch.cuda.is_available() and isinstance(self.device, str) and "cuda" in self.device:
+                with torch.autocast(device_type="cuda", dtype=torch.float16):
+                    logits = self.model(**inputs, return_dict=True).logits
+            else:
+                logits = self.model(**inputs, return_dict=True).logits
             # Ensure GPU work is accounted for in timing when measured outside
             if torch.cuda.is_available():
                 idx = _device_index(self.device)
@@ -101,7 +105,11 @@ class ElectraReranker(Reranker):
                 return_tensors="pt",
                 max_length=self.max_length,
             ).to(self.device)
-            logits = self.model(**inputs, return_dict=True).logits
+            if torch.cuda.is_available() and isinstance(self.device, str) and "cuda" in self.device:
+                with torch.autocast(device_type="cuda", dtype=torch.float16):
+                    logits = self.model(**inputs, return_dict=True).logits
+            else:
+                logits = self.model(**inputs, return_dict=True).logits
             if torch.cuda.is_available():
                 idx = _device_index(self.device)
                 try:

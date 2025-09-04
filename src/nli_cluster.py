@@ -131,6 +131,8 @@ def build_relation_graph(
     batch_size: int = 32,
     edge_rule: str = "avg",
     dir_margin: float = 0.0,
+    autocast: bool = True,
+    autocast_dtype: str = "fp16",
 ) -> Tuple[List[Set[int]], List[List[float]], dict]:
     """Construct a weighted graph of section pairs based on NLI probabilities.
 
@@ -148,6 +150,7 @@ def build_relation_graph(
     stats = {"entailment": 0, "neutral": 0, "contradiction": 0}
 
     texts = [s.get("section_text", "") for s in sections]
+    # Always score all unique pairs (i < j)
     pairs = [(i, j) for i in range(n) for j in range(i + 1, n)]
     labels = ["contradiction", "neutral", "entailment"]
     for start in range(0, len(pairs), batch_size):
@@ -163,20 +166,31 @@ def build_relation_graph(
             max_length=eff_max_len,
             padding=True,
         ).to(device)
-        inputs2 = tokenizer(
-            hypotheses,
-            premises,
-            return_tensors="pt",
-            truncation=True,
-            max_length=eff_max_len,
-            padding=True,
-        ).to(device)
-        probs1 = model(**inputs1).logits.softmax(dim=1)
-        probs2 = model(**inputs2).logits.softmax(dim=1)
+        # Forward passes (optionally bidirectional, with autocast on CUDA)
+        use_cuda = torch.cuda.is_available() and (
+            (hasattr(device, "type") and device.type == "cuda") or (isinstance(device, str) and device.startswith("cuda"))
+        )
+        if autocast and use_cuda:
+            amp_dtype = torch.float16 if autocast_dtype == "fp16" else torch.bfloat16
+            ctx = torch.autocast(device_type="cuda", dtype=amp_dtype)
+        else:
+            from contextlib import nullcontext
+            ctx = nullcontext()
+
+        with ctx:
+            probs1 = model(**inputs1).logits.softmax(dim=1)
+            inputs2 = tokenizer(
+                hypotheses,
+                premises,
+                return_tensors="pt",
+                truncation=True,
+                max_length=eff_max_len,
+                padding=True,
+            ).to(device)
+            probs2 = model(**inputs2).logits.softmax(dim=1)
 
         # Average (symmetric) probabilities
         probs_avg = (probs1 + probs2) / 2
-
         # Directional deltas (entailment - contradiction) per orientation
         ent1 = probs1[:, 2]
         contr1 = probs1[:, 0]
@@ -184,14 +198,10 @@ def build_relation_graph(
         contr2 = probs2[:, 0]
         d1 = ent1 - contr1
         d2 = ent2 - contr2
-
         # Averaged values for legacy thresholds
         ent_avg = probs_avg[:, 2]
         contr_avg = probs_avg[:, 0]
-        deltas_avg = ent_avg - contr_avg
-
         label_ids = torch.argmax(probs_avg, dim=1).cpu().tolist()
-
         ents = ent_avg.cpu().tolist()
         contrs = contr_avg.cpu().tolist()
 
@@ -260,6 +270,8 @@ def cluster_sections_clique(
     batch_size: int = 32,
     edge_rule: str = "avg",
     dir_margin: float = 0.0,
+    autocast: bool = True,
+    autocast_dtype: str = "fp16",
 ) -> Tuple[List[dict], dict]:
     """Cluster sections by finding maximal cliques with weighted edges.
 
@@ -288,6 +300,8 @@ def cluster_sections_clique(
         batch_size=batch_size,
         edge_rule=edge_rule,
         dir_margin=dir_margin,
+        autocast=autocast,
+        autocast_dtype=autocast_dtype,
     )
 
     # normalize BGE similarities to [0,1] so they can be blended with edge weights

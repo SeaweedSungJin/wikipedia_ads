@@ -150,6 +150,8 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
                 batch_size=cfg.nli_batch_size,
                 edge_rule=getattr(cfg, "nli_edge_rule", "avg"),
                 dir_margin=getattr(cfg, "nli_dir_margin", 0.0),
+                autocast=getattr(cfg, "nli_autocast", True),
+                autocast_dtype=getattr(cfg, "nli_autocast_dtype", "fp16"),
             )
             nli_elapsed = time.time() - nli_start
             total_nli_elapsed += nli_elapsed
