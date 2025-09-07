@@ -17,7 +17,7 @@ from src.pipeline import search_rag_pipeline
 from src.nli_cluster import cluster_sections_clique
 from src.models import load_vlm_model, generate_vlm_answer, load_nli_model, resolve_device
 from src.eval import evaluate_example
-from src.utils import normalize_title, normalize_url_to_title
+from src.utils import normalize_title, normalize_url_to_title, prefetch_image
 from src.metrics_utils import PowerSampler, MetricsSink, stage_meter, Percentiles, env_info
 
 
@@ -125,10 +125,18 @@ def main() -> None:
             return stage_meter(name, sink, sample_id, device=0, power=None, is_warmup=warmup)
         return _factory
 
+    prev_image_path = None
     for sample in ds:
         if not sample.image_paths:
             continue
         cfg.image_path = sample.image_paths[0]
+        # Overlap I/O: prefetch next sample's image in background
+        if prev_image_path is not None:
+            try:
+                prefetch_image(prev_image_path)
+            except Exception:
+                pass
+        prev_image_path = cfg.image_path
         cfg.text_query = sample.question
         warmup = sample_total < args.warmup_steps
         sid = sample.row_idx

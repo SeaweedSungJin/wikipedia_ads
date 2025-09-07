@@ -10,11 +10,16 @@ import faiss
 import nltk
 import requests
 from PIL import Image, UnidentifiedImageError
+import threading
 import numpy as np
 from tqdm import tqdm
 
 # Simple User-Agent compliant with Wikimedia policy
 USER_AGENT = "wikipedia_ads/1.0 (https://example.com/contact)"
+
+# Simple in-memory image prefetch cache
+_IMG_CACHE: Dict[str, Image.Image] = {}
+_IMG_CACHE_LOCK = threading.Lock()
 
 # ---------------------------------------------------------------------------
 # Data loading helpers
@@ -34,7 +39,14 @@ def load_image(path: str) -> Image.Image:
     Any failures result in a blank RGB image so the pipeline can
     continue processing without crashing.
     """
-
+    # Serve from cache if present
+    with _IMG_CACHE_LOCK:
+        img = _IMG_CACHE.pop(path, None)
+        if img is not None:
+            try:
+                return img.convert("RGB")
+            except Exception:
+                pass
     try:
         if path.startswith("http"):
             headers = {"User-Agent": USER_AGENT}
@@ -47,6 +59,22 @@ def load_image(path: str) -> Image.Image:
     except (FileNotFoundError, UnidentifiedImageError, requests.RequestException) as e:
         print(f"이미지 로딩 실패 ({path}): {e}")
         return Image.new("RGB", (224, 224), color=0)
+
+
+def prefetch_image(path: str) -> None:
+    """Background load an image into a small cache for faster next use."""
+    def _load():
+        try:
+            img = load_image(path)
+            with _IMG_CACHE_LOCK:
+                # Keep a small cache of most recent 8 images
+                if len(_IMG_CACHE) >= 8:
+                    _IMG_CACHE.pop(next(iter(_IMG_CACHE)))
+                _IMG_CACHE[path] = img
+        except Exception:
+            pass
+    t = threading.Thread(target=_load, daemon=True)
+    t.start()
 
 
 def load_kb(knowledge_json_path: str) -> Tuple[List[dict], Dict[str, int]]:

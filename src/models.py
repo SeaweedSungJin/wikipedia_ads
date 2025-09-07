@@ -56,6 +56,12 @@ def load_bge_reranker(model_name: str = "BAAI/bge-reranker-v2-m3", device: str |
         from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
         model = AutoModelForSequenceClassification.from_pretrained(model_name)
+        # Try to accelerate with BetterTransformer if available
+        try:
+            from optimum.bettertransformer import BetterTransformer  # type: ignore
+            model = BetterTransformer.transform(model, keep_original_model=False)
+        except Exception:
+            pass
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         if device:
             model.to(device)
@@ -77,6 +83,11 @@ def load_electra_reranker(
         from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
         model = AutoModelForSequenceClassification.from_pretrained(model_name)
+        try:
+            from optimum.bettertransformer import BetterTransformer  # type: ignore
+            model = BetterTransformer.transform(model, keep_original_model=False)
+        except Exception:
+            pass
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         if device:
             model.to(device)
@@ -126,6 +137,16 @@ def setup_cuda() -> None:
         torch.cuda.empty_cache()
         # Enable segmented memory allocation
         os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+        # Enable TF32 matmul/cudnn on Ampere+ and prefer high-precision matmul kernels
+        try:
+            torch.backends.cuda.matmul.allow_tf32 = True
+            torch.backends.cudnn.allow_tf32 = True
+            if hasattr(torch, "set_float32_matmul_precision"):
+                torch.set_float32_matmul_precision("high")
+        except Exception:
+            pass
+    # Enable fast Rust tokenizer parallelism by default
+    os.environ.setdefault("TOKENIZERS_PARALLELISM", "true")
 
 def load_image_model(device_map="auto") -> Tuple[AutoModel, CLIPImageProcessor]:
     """Load EVA-CLIP image model, caching the result."""
@@ -265,6 +286,12 @@ def load_nli_model(
     print(f"Loading NLI model: {model_name}")
     tok = AutoTokenizer.from_pretrained(model_name)
     mdl = AutoModelForSequenceClassification.from_pretrained(model_name)
+    # Try BetterTransformer acceleration if available
+    try:
+        from optimum.bettertransformer import BetterTransformer  # type: ignore
+        mdl = BetterTransformer.transform(mdl, keep_original_model=False)
+    except Exception:
+        pass
     mdl.to(device)
     mdl.eval()
     return mdl, tok

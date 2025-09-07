@@ -56,8 +56,8 @@ nli_models:
 rerankers:
   contriever: false
   jina_m0: false
-  bge: true
-  electra: false
+  bge: false
+  electra: true
   mpnet: false
 
 #양방향 실험용

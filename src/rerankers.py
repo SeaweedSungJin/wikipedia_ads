@@ -49,25 +49,59 @@ class BGEReranker(Reranker):
     @torch.no_grad()
     def score(self, query: str, sections: List[str]) -> List[float]:
         scores: List[float] = []
-        for i in range(0, len(sections), self.batch_size):
-            batch = sections[i : i + self.batch_size]
-            pairs = [[query, s] for s in batch]
-            if not pairs:
-                continue
-            inputs = self.tokenizer(
-                pairs,
-                padding=True,
-                truncation=True,
-                return_tensors="pt",
-                max_length=self.max_length,
-            ).to(self.device)
-            if torch.cuda.is_available() and isinstance(self.device, str) and "cuda" in self.device:
-                with torch.autocast(device_type="cuda", dtype=torch.float16):
-                    logits = self.model(**inputs, return_dict=True).logits
+        use_cuda = torch.cuda.is_available() and isinstance(self.device, str) and "cuda" in self.device
+        prefetch_stream = torch.cuda.Stream(device=_device_index(self.device)) if use_cuda else None
+
+        next_inputs = None
+        next_pairs = None
+        total = len(sections)
+        i = 0
+        while i < total:
+            if next_inputs is None:
+                batch = sections[i : i + self.batch_size]
+                pairs = [[query, s] for s in batch]
+                tok = self.tokenizer(
+                    pairs, padding=True, truncation=True, return_tensors="pt", max_length=self.max_length
+                )
+                if use_cuda:
+                    assert prefetch_stream is not None
+                    with torch.cuda.stream(prefetch_stream):
+                        moved = {}
+                        for k, v in tok.items():
+                            moved[k] = v.to(self.device, non_blocking=True)
+                    next_inputs = moved
+                else:
+                    next_inputs = tok.to(self.device)
+
+            # Prefetch next batch while computing current
+            j = i + self.batch_size
+            if j < total:
+                batch2 = sections[j : j + self.batch_size]
+                next_pairs = [[query, s] for s in batch2]
+                tok2 = self.tokenizer(
+                    next_pairs, padding=True, truncation=True, return_tensors="pt", max_length=self.max_length
+                )
+                if use_cuda:
+                    with torch.cuda.stream(prefetch_stream):
+                        moved2 = {}
+                        for k, v in tok2.items():
+                            moved2[k] = v.to(self.device, non_blocking=True)
+                    after_inputs = moved2
+                else:
+                    after_inputs = tok2.to(self.device)
             else:
-                logits = self.model(**inputs, return_dict=True).logits
-            # Ensure GPU work is accounted for in timing when measured outside
-            if torch.cuda.is_available():
+                after_inputs = None
+
+            if use_cuda:
+                torch.cuda.current_stream().wait_stream(prefetch_stream)  # ensure inputs ready
+
+            if use_cuda:
+                with torch.autocast(device_type="cuda", dtype=torch.float16):
+                    logits = self.model(**next_inputs, return_dict=True).logits
+            else:
+                logits = self.model(**next_inputs, return_dict=True).logits
+
+            if use_cuda:
                 idx = _device_index(self.device)
                 try:
                     if idx is not None:
@@ -76,7 +110,12 @@ class BGEReranker(Reranker):
                         torch.cuda.synchronize()
                 except Exception:
                     pass
+
             scores.extend(logits.view(-1).cpu().float().tolist())
+
+            next_inputs = after_inputs
+            i = j
+
         return scores
 
 
@@ -93,32 +132,56 @@ class ElectraReranker(Reranker):
     @torch.no_grad()
     def score(self, query: str, sections: List[str]) -> List[float]:
         scores: List[float] = []
-        for i in range(0, len(sections), self.batch_size):
-            batch = sections[i : i + self.batch_size]
-            pairs = [[query, s] for s in batch]
-            if not pairs:
-                continue
-            inputs = self.tokenizer(
-                pairs,
-                padding=True,
-                truncation=True,
-                return_tensors="pt",
-                max_length=self.max_length,
-            ).to(self.device)
-            if torch.cuda.is_available() and isinstance(self.device, str) and "cuda" in self.device:
-                with torch.autocast(device_type="cuda", dtype=torch.float16):
-                    logits = self.model(**inputs, return_dict=True).logits
+        use_cuda = torch.cuda.is_available() and isinstance(self.device, str) and "cuda" in self.device
+        prefetch_stream = torch.cuda.Stream(device=_device_index(self.device)) if use_cuda else None
+
+        next_inputs = None
+        total = len(sections)
+        i = 0
+        while i < total:
+            if next_inputs is None:
+                batch = sections[i : i + self.batch_size]
+                pairs = [[query, s] for s in batch]
+                tok = self.tokenizer(
+                    pairs, padding=True, truncation=True, return_tensors="pt", max_length=self.max_length
+                )
+                if use_cuda:
+                    assert prefetch_stream is not None
+                    with torch.cuda.stream(prefetch_stream):
+                        moved = {}
+                        for k, v in tok.items():
+                            moved[k] = v.to(self.device, non_blocking=True)
+                    next_inputs = moved
+                else:
+                    next_inputs = tok.to(self.device)
+
+            j = i + self.batch_size
+            if j < total:
+                batch2 = sections[j : j + self.batch_size]
+                pairs2 = [[query, s] for s in batch2]
+                tok2 = self.tokenizer(
+                    pairs2, padding=True, truncation=True, return_tensors="pt", max_length=self.max_length
+                )
+                if use_cuda:
+                    with torch.cuda.stream(prefetch_stream):
+                        moved2 = {}
+                        for k, v in tok2.items():
+                            moved2[k] = v.to(self.device, non_blocking=True)
+                    after_inputs = moved2
+                else:
+                    after_inputs = tok2.to(self.device)
             else:
-                logits = self.model(**inputs, return_dict=True).logits
-            if torch.cuda.is_available():
-                idx = _device_index(self.device)
-                try:
-                    if idx is not None:
-                        torch.cuda.synchronize(idx)
-                    else:
-                        torch.cuda.synchronize()
-                except Exception:
-                    pass
+                after_inputs = None
+
+            if use_cuda:
+                torch.cuda.current_stream().wait_stream(prefetch_stream)
+
+            if use_cuda:
+                with torch.autocast(device_type="cuda", dtype=torch.float16):
+                    logits = self.model(**next_inputs, return_dict=True).logits
+            else:
+                logits = self.model(**next_inputs, return_dict=True).logits
+
             if logits.ndim == 2 and logits.shape[1] == 1:
                 batch_scores = logits.view(-1)
             elif logits.ndim == 2 and logits.shape[1] == 2:
@@ -127,7 +190,20 @@ class ElectraReranker(Reranker):
                 batch_scores = logits[:, 2]
             else:
                 raise ValueError(f"Unexpected Electra logits shape: {tuple(logits.shape)}")
+
+            if use_cuda:
+                idx = _device_index(self.device)
+                try:
+                    if idx is not None:
+                        torch.cuda.synchronize(idx)
+                    else:
+                        torch.cuda.synchronize()
+                except Exception:
+                    pass
+
             scores.extend(batch_scores.cpu().float().tolist())
+            next_inputs = after_inputs
+            i = j
         return scores
 
 

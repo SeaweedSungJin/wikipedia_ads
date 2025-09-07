@@ -166,12 +166,22 @@ def build_relation_graph(
             max_length=eff_max_len,
             padding=True,
         ).to(device)
+        inputs2 = tokenizer(
+            hypotheses,
+            premises,
+            return_tensors="pt",
+            truncation=True,
+            max_length=eff_max_len,
+            padding=True,
+        ).to(device)
+
         # Forward passes (optionally bidirectional, with autocast on CUDA)
         use_cuda = torch.cuda.is_available() and (
             (hasattr(device, "type") and device.type == "cuda") or (isinstance(device, str) and device.startswith("cuda"))
         )
         if autocast and use_cuda:
             amp_dtype = torch.float16 if autocast_dtype == "fp16" else torch.bfloat16
+            from contextlib import nullcontext
             ctx = torch.autocast(device_type="cuda", dtype=amp_dtype)
         else:
             from contextlib import nullcontext
@@ -179,14 +189,6 @@ def build_relation_graph(
 
         with ctx:
             probs1 = model(**inputs1).logits.softmax(dim=1)
-            inputs2 = tokenizer(
-                hypotheses,
-                premises,
-                return_tensors="pt",
-                truncation=True,
-                max_length=eff_max_len,
-                padding=True,
-            ).to(device)
             probs2 = model(**inputs2).logits.softmax(dim=1)
 
         # Average (symmetric) probabilities
