@@ -5,7 +5,7 @@ import torch
 from src.config import Config
 from src.dataloader import VQADataset
 from src.pipeline import search_rag_pipeline
-from src.nli_cluster import cluster_sections_clique
+from src.nli_cluster import cluster_sections_clique, cluster_sections_consistency
 from src.models import load_vlm_model, generate_vlm_answer, load_nli_model, resolve_device
 from src.eval import evaluate_example
 from src.utils import normalize_title, normalize_url_to_title
@@ -136,23 +136,40 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
                     bge_sec_hits[k] += 1
 
             nli_start = time.time()
-            clusters, _ = cluster_sections_clique(
-                candidate_sections,
-                model=model,
-                tokenizer=tokenizer,
-                max_length=cfg.nli_max_length,
-                device=device,
-                max_cluster_size=cfg.nli_max_cluster,
-                lambda_score=cfg.nli_lambda,
-                e_min=cfg.nli_e_min,
-                margin=cfg.nli_margin,
-                tau=cfg.nli_tau,
-                batch_size=cfg.nli_batch_size,
-                edge_rule=getattr(cfg, "nli_edge_rule", "avg"),
-                dir_margin=getattr(cfg, "nli_dir_margin", 0.0),
-                autocast=getattr(cfg, "nli_autocast", True),
-                autocast_dtype=getattr(cfg, "nli_autocast_dtype", "fp16"),
-            )
+            if getattr(cfg, "nli_selection", "consistency") == "consistency":
+                clusters, _ = cluster_sections_consistency(
+                    candidate_sections,
+                    model=model,
+                    tokenizer=tokenizer,
+                    max_length=cfg.nli_max_length,
+                    device=device,
+                    alpha=getattr(cfg, "nli_alpha", 1.0),
+                    beta=getattr(cfg, "nli_beta", 1.0),
+                    batch_size=cfg.nli_batch_size,
+                    tau_edge=max(0.0, min(1.0, getattr(cfg, "nli_tau", 0.0))),
+                    autocast=getattr(cfg, "nli_autocast", True),
+                    autocast_dtype=getattr(cfg, "nli_autocast_dtype", "fp16"),
+                )
+            else:
+                clusters, _ = cluster_sections_clique(
+                    candidate_sections,
+                    model=model,
+                    tokenizer=tokenizer,
+                    max_length=cfg.nli_max_length,
+                    device=device,
+                    max_cluster_size=cfg.nli_max_cluster,
+                    alpha=getattr(cfg, "nli_alpha", 1.0),
+                    beta=getattr(cfg, "nli_beta", 1.0),
+                    lambda_score=cfg.nli_lambda,
+                    e_min=cfg.nli_e_min,
+                    margin=cfg.nli_margin,
+                    tau=cfg.nli_tau,
+                    batch_size=cfg.nli_batch_size,
+                    edge_rule=getattr(cfg, "nli_edge_rule", "avg"),
+                    dir_margin=getattr(cfg, "nli_dir_margin", 0.0),
+                    autocast=getattr(cfg, "nli_autocast", True),
+                    autocast_dtype=getattr(cfg, "nli_autocast_dtype", "fp16"),
+                )
             nli_elapsed = time.time() - nli_start
             total_nli_elapsed += nli_elapsed
             top_cluster = clusters[0]["sections"] if clusters else []

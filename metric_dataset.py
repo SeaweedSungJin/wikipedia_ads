@@ -7,6 +7,7 @@ import random
 import time
 from datetime import datetime
 from typing import List, Tuple
+import csv
 
 import numpy as np
 import torch
@@ -14,7 +15,7 @@ import torch
 from src.config import Config
 from src.dataloader import VQADataset
 from src.pipeline import search_rag_pipeline
-from src.nli_cluster import cluster_sections_clique
+from src.nli_cluster import cluster_sections_clique, cluster_sections_consistency
 from src.models import load_vlm_model, generate_vlm_answer, load_nli_model, resolve_device
 from src.eval import evaluate_example
 from src.utils import normalize_title, normalize_url_to_title, prefetch_image
@@ -61,12 +62,16 @@ def main() -> None:
         end=cfg.dataset_end,
     )
 
-    out_dir = args.out_dir or os.path.join(
-        os.getcwd(), f"metrics_run_{datetime.now().strftime('%Y%m%d_%H%M')}"
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    default_out = os.path.join(
+        base_dir, "metrics", f"metrics_run_{datetime.now().strftime('%Y%m%d_%H%M')}"
     )
+    out_dir = args.out_dir or default_out
     os.makedirs(out_dir, exist_ok=True)
     samples_csv = os.path.join(out_dir, "metrics_samples.csv")
     summary_json = os.path.join(out_dir, "metrics_summary.json")
+    docs_csv = os.path.join(out_dir, "candidate_docs.csv")
+    secs_csv = os.path.join(out_dir, "candidate_sections.csv")
 
     # Devices
     device_img = resolve_device(cfg.image_device)
@@ -126,6 +131,24 @@ def main() -> None:
         return _factory
 
     prev_image_path = None
+
+    # Prepare CSV writers for candidate docs/sections
+    f_docs = open(docs_csv, "w", newline="", encoding="utf-8")
+    w_docs = csv.writer(f_docs)
+    w_docs.writerow(["sample_id", "rank", "doc_title", "img_score_raw", "img_score_norm", "image_url"]) 
+
+    f_secs = open(secs_csv, "w", newline="", encoding="utf-8")
+    w_secs = csv.writer(f_secs)
+    w_secs.writerow([
+        "sample_id",
+        "rank",
+        "doc_title",
+        "section_id",
+        "rerank_score_raw",
+        "rerank_score_norm",
+        "img_score_norm",
+        "combined_score",
+    ])
     for sample in ds:
         if not sample.image_paths:
             continue
@@ -151,15 +174,44 @@ def main() -> None:
             continue
         sample_total += 1
 
+        # Log candidate docs scores
+        for rank, res in enumerate(img_results, 1):
+            doc_title = res.get("doc", {}).get("title", "")
+            w_docs.writerow([
+                sid,
+                rank,
+                doc_title,
+                res.get("similarity", 0.0),
+                res.get("img_norm", None),
+                res.get("image_url", None),
+            ])
+
         candidate_sections = [
             {
                 "doc_title": s.get("source_title", ""),
                 "section_id": s.get("section_idx"),
                 "section_text": s.get("section_text", ""),
                 "similarity": s.get("similarity", 0.0),
+                "rerank_score": s.get("rerank_score", None),
+                "rerank_norm": s.get("rerank_norm", None),
+                "img_norm": s.get("img_norm", None),
+                "combined_score": s.get("combined_score", None),
             }
             for s in top_sections
         ]
+
+        # Log candidate sections scores
+        for rank, s in enumerate(candidate_sections, 1):
+            w_secs.writerow([
+                sid,
+                rank,
+                s.get("doc_title", ""),
+                s.get("section_id", None),
+                s.get("rerank_score", None),
+                s.get("rerank_norm", None),
+                s.get("img_norm", None),
+                s.get("combined_score", None),
+            ])
 
         # Ground truth titles/sections
         gt_titles_raw = str(sample.wikipedia_title or '').split('|')
@@ -217,23 +269,40 @@ def main() -> None:
 
             # NLI stage timing/energy
             with stage_meter("nli", sink, sid, device=device_nli, power=ps_nli, is_warmup=warmup):
-                clusters, stats = cluster_sections_clique(
-                    candidate_sections,
-                    model=nli_model,
-                    tokenizer=nli_tokenizer,
-                    max_length=cfg.nli_max_length,
-                    device=device_nli,
-                    max_cluster_size=cfg.nli_max_cluster,
-                    lambda_score=cfg.nli_lambda,
-                    e_min=cfg.nli_e_min,
-                    margin=cfg.nli_margin,
-                    tau=cfg.nli_tau,
-                    batch_size=cfg.nli_batch_size,
-                    edge_rule=getattr(cfg, "nli_edge_rule", "avg"),
-                    dir_margin=getattr(cfg, "nli_dir_margin", 0.0),
-                    autocast=getattr(cfg, "nli_autocast", True),
-                    autocast_dtype=getattr(cfg, "nli_autocast_dtype", "fp16"),
-                )
+                if getattr(cfg, "nli_selection", "consistency") == "consistency":
+                    clusters, stats = cluster_sections_consistency(
+                        candidate_sections,
+                        model=nli_model,
+                        tokenizer=nli_tokenizer,
+                        max_length=cfg.nli_max_length,
+                        device=device_nli,
+                        alpha=getattr(cfg, "nli_alpha", 1.0),
+                        beta=getattr(cfg, "nli_beta", 1.0),
+                        batch_size=cfg.nli_batch_size,
+                        tau_edge=max(0.0, min(1.0, getattr(cfg, "nli_tau", 0.0))),
+                        autocast=getattr(cfg, "nli_autocast", True),
+                        autocast_dtype=getattr(cfg, "nli_autocast_dtype", "fp16"),
+                    )
+                else:
+                    clusters, stats = cluster_sections_clique(
+                        candidate_sections,
+                        model=nli_model,
+                        tokenizer=nli_tokenizer,
+                        max_length=cfg.nli_max_length,
+                        device=device_nli,
+                        max_cluster_size=cfg.nli_max_cluster,
+                        alpha=getattr(cfg, "nli_alpha", 1.0),
+                        beta=getattr(cfg, "nli_beta", 1.0),
+                        lambda_score=cfg.nli_lambda,
+                        e_min=cfg.nli_e_min,
+                        margin=cfg.nli_margin,
+                        tau=cfg.nli_tau,
+                        batch_size=cfg.nli_batch_size,
+                        edge_rule=getattr(cfg, "nli_edge_rule", "avg"),
+                        dir_margin=getattr(cfg, "nli_dir_margin", 0.0),
+                        autocast=getattr(cfg, "nli_autocast", True),
+                        autocast_dtype=getattr(cfg, "nli_autocast_dtype", "fp16"),
+                    )
 
             top_cluster = clusters[0]["sections"] if clusters else []
 
@@ -307,9 +376,17 @@ def main() -> None:
     with open(summary_json, "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2, ensure_ascii=False)
 
+    # Close per-sample CSVs
+    try:
+        f_docs.close(); f_secs.close()
+    except Exception:
+        pass
+
     # Console summary
     print("Saved sample metrics to:", samples_csv)
     print("Saved summary to:", summary_json)
+    print("Saved candidate docs to:", docs_csv)
+    print("Saved candidate sections to:", secs_csv)
     for st, s in summary["stages"].items():
         l = s["latency"]
         print(f"{st}: mean={l['mean']:.3f}s p50={l['p50']:.3f}s p90={l['p90']:.3f}s p99={l['p99']:.3f}s | energy_mean={s['energy_J']['mean']:.1f}J | vram_max={s['peak_vram_gb']['max']:.2f}GB")

@@ -10,7 +10,7 @@ image_device: 0
 # Device placement
 bge_device: 1
 nli_device: 2
-nli_batch_size: 64
+nli_batch_size: 512
 dataset_csv: /dataset/evqa/test.csv
 id2name_paths: 
   - /dataset/inaturalist/train_id2name.json
@@ -30,10 +30,16 @@ segment_level: section # "section", "paragraph" or "sentence"
 chunk_size: 1024
 #bge_model: BAAI/bge-reranker-v2-m3
 bge_model: BAAI/bge-reranker-large
-bge_max_length: 512 # ✅ 추가
+bge_max_length: 1024 # ✅ 추가
 bge_conf_threshold: 0.3
 electra_model: cross-encoder/ms-marco-electra-base
 mpnet_model: sentence-transformers/all-mpnet-base-v2 #bi-encoder
+
+# Fusion weights for section ranking (softmax/sigmoid normalized)
+rank_img_weight: 0.7
+rank_rerank_weight: 0.3
+rank_text_temp: 2.0   # sigmoid temperature for text reranker scores
+# rank_img_softmax_temp: 1.0  # optional softmax temperature for image doc scores
 
 deberta_nli_model: tasksource/deberta-base-long-nli
 roberta_nli_model: FacebookAI/roberta-large-mnli
@@ -45,6 +51,12 @@ nli_e_min: 0.4 #Entailment가 이거보다 낮음 탈락
 nli_margin: 0.2 #ent-con 점수가 이거보다 낮으면 탈락 #0.0 #기존 0.1
 nli_tau: 0.20 #α * 내포 - β * 모순 점수가 이거보다 낮음 탈락, 지금αβ는 둘다 1
 nli_lambda: 0.7 
+## Consistency selection parameters
+# C_ij = max(0, alpha*Pe - beta*Pc)
+nli_alpha: 1.0
+nli_beta: 1.0
+# 'consistency' enables greedy pruning; 'clique' uses maximal-clique method
+nli_selection: consistency
 
 # NLI model selection
 nli_models:

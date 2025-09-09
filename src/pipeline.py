@@ -186,6 +186,28 @@ def search_rag_pipeline(
     fused_embeddings = []
     filtered_sections: List[dict] = []  # ensure defined for all code paths
 
+    # Precompute per-document image score normalization using softmax across retrieved docs
+    if top_k_image_results:
+        img_vals = np.array([r.get("similarity", 0.0) for r in top_k_image_results], dtype=np.float64)
+        # Softmax with temperature
+        t_img = float(getattr(cfg, "rank_img_softmax_temp", 1.0))
+        if t_img <= 0:
+            t_img = 1.0
+        x = img_vals / t_img
+        x = x - np.max(x)  # for numerical stability
+        exps = np.exp(x)
+        denom = exps.sum()
+        if denom <= 0 or not np.isfinite(denom):
+            probs = np.full_like(img_vals, 1.0 / max(1, len(img_vals)))
+        else:
+            probs = exps / denom
+        for res, p in zip(top_k_image_results, probs.tolist()):
+            res["img_norm"] = float(p)
+        # Map doc title -> img_norm for quick lookup when scoring sections
+        doc_img_norm = {res["doc"].get("title", ""): res["img_norm"] for res in top_k_image_results}
+    else:
+        doc_img_norm = {}
+
     if use_contriever:
         if text_encoder is None:
             text_encoder = load_text_encoder(cfg.text_encoder_model, device_map="auto")
@@ -265,6 +287,7 @@ def search_rag_pipeline(
         scores = reranker.score(cfg.text_query, [s["section_text"] for s in filtered_sections])
         for sec, score in zip(filtered_sections, scores):
             sec["similarity"] = float(score)
+            sec["rerank_score"] = float(score)
 
     if use_electra:
         ce_dev = (
@@ -277,6 +300,7 @@ def search_rag_pipeline(
         scores = reranker.score(cfg.text_query, [s["section_text"] for s in filtered_sections])
         for sec, score in zip(filtered_sections, scores):
             sec["similarity"] = float(score)
+            sec["rerank_score"] = float(score)
 
     # Apply rerankers inside a stage meter if provided
     if stage_meter_factory and (use_jina or use_bge or use_electra or use_mpnet):
@@ -312,10 +336,29 @@ def search_rag_pipeline(
         ).cpu().tolist()
         for sec, score in zip(filtered_sections, scores):
             sec["similarity"] = float(score)
-    # Sort sections by similarity score
-    sorted_sections = sorted(
-        filtered_sections, key=lambda x: x.get("similarity", -1), reverse=True
-    )
+            sec["rerank_score"] = float(score)
+    # Fuse reranker and image scores for section ranking
+    # Only applies if a reranker provided similarity scores
+    if filtered_sections and any("rerank_score" in s for s in filtered_sections):
+        rer_vals = np.array([s.get("rerank_score", 0.0) for s in filtered_sections], dtype=np.float64)
+        # Sigmoid normalization with temperature for reranker scores
+        t_txt = float(getattr(cfg, "rank_text_temp", 2.0))
+        if t_txt <= 0:
+            t_txt = 1.0
+        rer_norms = (1.0 / (1.0 + np.exp(-(rer_vals / t_txt)))).tolist()
+        w_img = getattr(cfg, "rank_img_weight", 0.3)
+        w_rer = getattr(cfg, "rank_rerank_weight", 0.7)
+        for sec, rn in zip(filtered_sections, rer_norms):
+            sec["rerank_norm"] = float(rn)
+            img_norm = float(doc_img_norm.get(sec.get("source_title", ""), 0.0))
+            sec["img_norm"] = img_norm
+            sec["combined_score"] = float(w_img * img_norm + w_rer * rn)
+        sort_key = lambda x: x.get("combined_score", x.get("similarity", -1))
+    else:
+        sort_key = lambda x: x.get("similarity", -1)
+
+    # Sort sections by fused score (if available), else by similarity
+    sorted_sections = sorted(filtered_sections, key=sort_key, reverse=True)
 
     if use_all_sections:
         top_m_sections = sorted_sections
@@ -325,7 +368,7 @@ def search_rag_pipeline(
         top_m_sections = sorted_sections[: cfg.m_value]
 
         if (use_bge or use_electra or use_mpnet) and top_m_sections:
-            score_tensor = torch.tensor([s["similarity"] for s in top_m_sections])
+            score_tensor = torch.tensor([s.get("similarity", 0.0) for s in top_m_sections])
             probs = torch.softmax(score_tensor, dim=0).tolist()
             for sec, prob in zip(top_m_sections, probs):
                 sec["prob"] = float(prob)

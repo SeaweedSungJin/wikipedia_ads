@@ -24,12 +24,21 @@ class Config:
     segment_level: str = "section"  # "section", "paragraph" or "sentence"
     chunk_size: int = 1024  # Maximum characters per segment when splitting
     bge_max_length: int = 512
-    bge_batch_size: int = 32
+    bge_batch_size: int = 512
     bge_model: str = "BAAI/bge-reranker-v2-m3"  # BGE reranker model name
     electra_model: str = "cross-encoder/ms-marco-electra-base"  # Cross-encoder model
     electra_batch_size: int = 32
     mpnet_model: str = "sentence-transformers/all-mpnet-base-v2"  # Bi-encoder model
     bge_conf_threshold: float = 0.5  # Confidence threshold for reranker scores
+    # Fusion weights for section ranking (min-max scaled):
+    # combined = rank_img_weight * img_score_norm + rank_rerank_weight * rerank_score_norm
+    rank_img_weight: float = 0.3
+    rank_rerank_weight: float = 0.7
+    # Normalization temperatures
+    # Image doc score: softmax over retrieved docs with this temperature
+    rank_img_softmax_temp: float = 1.0
+    # Text reranker score: sigmoid(score / temp)
+    rank_text_temp: float = 2.0
     # NLI model names
     deberta_nli_model: str = "tasksource/deberta-base-long-nli"
     roberta_nli_model: str = "FacebookAI/roberta-large-mnli"
@@ -41,6 +50,11 @@ class Config:
     nli_margin: float = 0.15  # Entailment-contradiction margin for edges
     nli_tau: float = 0.25  # Weight cutoff for retaining edges
     nli_lambda: float = 0.7  # Blend weight between BGE and edge coherence
+    # Pairwise consistency weighting (C_ij = max(0, alpha*Pe - beta*Pc))
+    nli_alpha: float = 1.0
+    nli_beta: float = 1.0
+    # NLI selection mode: 'clique' (existing) or 'consistency' (greedy pruning)
+    nli_selection: str = "consistency"
     # NLI edge rule: 'avg' (default) or 'both_dir'
     nli_edge_rule: str = "avg"
     # Minimum (entailment - contradiction) required in each direction when using 'both_dir'

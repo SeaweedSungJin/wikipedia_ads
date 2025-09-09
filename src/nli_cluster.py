@@ -18,6 +18,7 @@ __all__ = [
     "build_relation_graph",
     "maximal_cliques",
     "cluster_sections_clique",
+    "cluster_sections_consistency",
 ]
 
 
@@ -356,5 +357,158 @@ def cluster_sections_clique(
         )
 
     stats["raw_cliques"] = raw_cliques
+    clusters.sort(key=lambda c: c["avg_score"], reverse=True)
+    return clusters, stats
+
+
+# ---------------------------------------------------------------------------
+# Consistency-based greedy pruning clustering
+# ---------------------------------------------------------------------------
+
+def _connected_components(adj: List[Set[int]]) -> List[List[int]]:
+    n = len(adj)
+    seen = [False] * n
+    comps: List[List[int]] = []
+    for i in range(n):
+        if seen[i]:
+            continue
+        stack = [i]
+        seen[i] = True
+        cur = []
+        while stack:
+            v = stack.pop()
+            cur.append(v)
+            for nb in adj[v]:
+                if not seen[nb]:
+                    seen[nb] = True
+                    stack.append(nb)
+        comps.append(sorted(cur))
+    return comps
+
+
+def _global_consistency(indices: List[int], weights: List[List[float]]) -> float:
+    m = len(indices)
+    if m < 2:
+        return 0.0
+    total = 0.0
+    for a in range(m):
+        ia = indices[a]
+        for b in range(a + 1, m):
+            ib = indices[b]
+            total += max(0.0, weights[ia][ib])
+    return (2.0 / (m * (m - 1))) * total
+
+
+def _greedy_prune(indices: List[int], weights: List[List[float]]) -> Tuple[List[int], float]:
+    # Precompute pairwise sums to enable O(1) removal deltas
+    cur = list(indices)
+    if len(cur) <= 2:
+        return sorted(cur), _global_consistency(sorted(cur), weights)
+    m = len(cur)
+    # sumC: total sum over pairs i<j of max(0, w)
+    sumC = 0.0
+    # contrib[k]: sum over j!=k of max(0, w_{k,j}) within current set
+    contrib = {k: 0.0 for k in cur}
+    for x in range(m):
+        i = cur[x]
+        for y in range(x + 1, m):
+            j = cur[y]
+            cij = max(0.0, weights[i][j])
+            sumC += cij
+            contrib[i] += cij
+            contrib[j] += cij
+    def score_of(size: int, sC: float) -> float:
+        if size < 2:
+            return 0.0
+        return (2.0 / (size * (size - 1))) * sC
+    improved = True
+    while improved and len(cur) > 2:
+        improved = False
+        base_score = score_of(len(cur), sumC)
+        best_gain = 0.0
+        best_rm = None
+        for k in cur:
+            size2 = len(cur) - 1
+            sC2 = sumC - contrib[k]
+            score2 = score_of(size2, sC2)
+            gain = score2 - base_score
+            if gain > best_gain + 1e-12:  # small epsilon to avoid flaps
+                best_gain = gain
+                best_rm = k
+        if best_rm is not None and best_gain > 0.0:
+            # Remove best_rm and update structures
+            cur.remove(best_rm)
+            # Update sumC and contrib for remaining nodes
+            for j in cur:
+                if j == best_rm:
+                    continue
+                cij = max(0.0, weights[best_rm][j])
+                contrib[j] -= cij
+            sumC -= contrib.pop(best_rm, 0.0)
+            improved = True
+    final_set = sorted(cur)
+    final_score = score_of(len(final_set), sumC)
+    return final_set, final_score
+
+
+def cluster_sections_consistency(
+    sections: List[dict],
+    *,
+    model,
+    tokenizer,
+    max_length: int = 512,
+    device: torch.device | str = "cpu",
+    alpha: float = 1.0,
+    beta: float = 1.0,
+    batch_size: int = 32,
+    # adjacency threshold (C_ij > tau_edge forms an edge for component split)
+    tau_edge: float = 1e-8,
+    autocast: bool = True,
+    autocast_dtype: str = "fp16",
+) -> Tuple[List[dict], dict]:
+    """Select section clusters by maximizing global consistency via greedy pruning.
+
+    Steps:
+    - Compute symmetric NLI probabilities for all pairs and derive C_ij = max(0, alpha*Pe - beta*Pc)
+    - Build an adjacency with edges for C_ij > tau_edge, find connected components
+    - For each component, greedily remove sentences that increase global consistency until no gain
+    - Return all pruned components as clusters, sorted by global consistency score (descending)
+    """
+    if not sections:
+        return [], {"entailment": 0, "neutral": 0, "contradiction": 0}
+
+    # Reuse relation graph builder but disable gates, avoid clamping weights
+    # Set e_min=0, margin=-1 so all pairs pass; tau=tau_edge to define connectivity only
+    adj, weights, stats = build_relation_graph(
+        sections,
+        model=model,
+        tokenizer=tokenizer,
+        max_length=max_length,
+        device=device,
+        alpha=alpha,
+        beta=beta,
+        clamp_weights=False,
+        e_min=0.0,
+        margin=-1.0,
+        tau=tau_edge,
+        batch_size=batch_size,
+        edge_rule="avg",
+        dir_margin=0.0,
+        autocast=autocast,
+        autocast_dtype=autocast_dtype,
+    )
+
+    comps = _connected_components(adj)
+    if not comps:
+        comps = [[i] for i in range(len(sections))]
+
+    clusters: List[dict] = []
+    for comp in comps:
+        pruned_idx, score = _greedy_prune(comp, weights)
+        members = [sections[i] for i in pruned_idx]
+        # keep original order by similarity in descending for VLM input stability
+        members.sort(key=lambda s: s.get("similarity", 0.0), reverse=True)
+        clusters.append({"avg_score": float(score), "sections": members, "indices": pruned_idx})
+
     clusters.sort(key=lambda c: c["avg_score"], reverse=True)
     return clusters, stats
