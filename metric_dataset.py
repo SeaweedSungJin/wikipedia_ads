@@ -72,6 +72,7 @@ def main() -> None:
     summary_json = os.path.join(out_dir, "metrics_summary.json")
     docs_csv = os.path.join(out_dir, "candidate_docs.csv")
     secs_csv = os.path.join(out_dir, "candidate_sections.csv")
+    clus_csv = os.path.join(out_dir, "candidate_clusters.csv")
 
     # Devices
     device_img = resolve_device(cfg.image_device)
@@ -148,6 +149,19 @@ def main() -> None:
         "rerank_score_norm",
         "img_score_norm",
         "combined_score",
+    ])
+    # NLI clusters (consistency/clique) per sample
+    f_clus = open(clus_csv, "w", newline="", encoding="utf-8")
+    w_clus = csv.writer(f_clus)
+    w_clus.writerow([
+        "sample_id",
+        "cluster_rank",
+        "selection_mode",
+        "cluster_score",
+        "cluster_size",
+        "member_indices",
+        "member_doc_titles",
+        "member_section_ids",
     ])
     for sample in ds:
         if not sample.image_paths:
@@ -304,6 +318,24 @@ def main() -> None:
                         autocast_dtype=getattr(cfg, "nli_autocast_dtype", "fp16"),
                     )
 
+            # Log NLI clusters for this sample
+            sel_mode = getattr(cfg, "nli_selection", "consistency")
+            for rank, cl in enumerate(clusters, 1):
+                members = cl.get("sections", [])
+                idxs = cl.get("indices", [])
+                titles = [m.get("doc_title", "") for m in members]
+                sids = [m.get("section_id") for m in members]
+                w_clus.writerow([
+                    sid,
+                    rank,
+                    sel_mode,
+                    cl.get("avg_score", 0.0),
+                    len(members),
+                    "|".join(str(x) for x in idxs),
+                    "|".join(titles),
+                    "|".join("" if v is None else str(v) for v in sids),
+                ])
+
             top_cluster = clusters[0]["sections"] if clusters else []
 
             # Optional VLM for E2E (hook)
@@ -378,7 +410,7 @@ def main() -> None:
 
     # Close per-sample CSVs
     try:
-        f_docs.close(); f_secs.close()
+        f_docs.close(); f_secs.close(); f_clus.close()
     except Exception:
         pass
 
@@ -387,6 +419,7 @@ def main() -> None:
     print("Saved summary to:", summary_json)
     print("Saved candidate docs to:", docs_csv)
     print("Saved candidate sections to:", secs_csv)
+    print("Saved candidate clusters to:", clus_csv)
     for st, s in summary["stages"].items():
         l = s["latency"]
         print(f"{st}: mean={l['mean']:.3f}s p50={l['p50']:.3f}s p90={l['p90']:.3f}s p99={l['p99']:.3f}s | energy_mean={s['energy_J']['mean']:.1f}J | vram_max={s['peak_vram_gb']['max']:.2f}GB")

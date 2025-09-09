@@ -52,6 +52,20 @@ class BGEReranker(Reranker):
         use_cuda = torch.cuda.is_available() and isinstance(self.device, str) and "cuda" in self.device
         prefetch_stream = torch.cuda.Stream(device=_device_index(self.device)) if use_cuda else None
 
+        # Clamp max_length to model/tokenizer capacity to avoid 1024 vs 512 position errors
+        try:
+            tok_max = getattr(self.tokenizer, "model_max_length", None)
+            if tok_max is None or tok_max > 1_000_000:
+                tok_max = None
+            model_max = getattr(getattr(self.model, "config", None), "max_position_embeddings", None)
+            eff_len = self.max_length
+            if isinstance(tok_max, int) and tok_max > 0:
+                eff_len = min(eff_len, tok_max)
+            if isinstance(model_max, int) and model_max > 0:
+                eff_len = min(eff_len, model_max)
+        except Exception:
+            eff_len = self.max_length
+
         next_inputs = None
         next_pairs = None
         total = len(sections)
@@ -61,7 +75,12 @@ class BGEReranker(Reranker):
                 batch = sections[i : i + self.batch_size]
                 pairs = [[query, s] for s in batch]
                 tok = self.tokenizer(
-                    pairs, padding=True, truncation=True, return_tensors="pt", max_length=self.max_length
+                    pairs,
+                    padding=True,
+                    truncation=True,
+                    return_tensors="pt",
+                    max_length=eff_len,
+                    pad_to_multiple_of=8,
                 )
                 if use_cuda:
                     assert prefetch_stream is not None
@@ -79,7 +98,12 @@ class BGEReranker(Reranker):
                 batch2 = sections[j : j + self.batch_size]
                 next_pairs = [[query, s] for s in batch2]
                 tok2 = self.tokenizer(
-                    next_pairs, padding=True, truncation=True, return_tensors="pt", max_length=self.max_length
+                    next_pairs,
+                    padding=True,
+                    truncation=True,
+                    return_tensors="pt",
+                    max_length=eff_len,
+                    pad_to_multiple_of=8,
                 )
                 if use_cuda:
                     with torch.cuda.stream(prefetch_stream):
@@ -135,6 +159,20 @@ class ElectraReranker(Reranker):
         use_cuda = torch.cuda.is_available() and isinstance(self.device, str) and "cuda" in self.device
         prefetch_stream = torch.cuda.Stream(device=_device_index(self.device)) if use_cuda else None
 
+        # Clamp max_length to model/tokenizer capacity
+        try:
+            tok_max = getattr(self.tokenizer, "model_max_length", None)
+            if tok_max is None or tok_max > 1_000_000:
+                tok_max = None
+            model_max = getattr(getattr(self.model, "config", None), "max_position_embeddings", None)
+            eff_len = self.max_length
+            if isinstance(tok_max, int) and tok_max > 0:
+                eff_len = min(eff_len, tok_max)
+            if isinstance(model_max, int) and model_max > 0:
+                eff_len = min(eff_len, model_max)
+        except Exception:
+            eff_len = self.max_length
+
         next_inputs = None
         total = len(sections)
         i = 0
@@ -143,7 +181,12 @@ class ElectraReranker(Reranker):
                 batch = sections[i : i + self.batch_size]
                 pairs = [[query, s] for s in batch]
                 tok = self.tokenizer(
-                    pairs, padding=True, truncation=True, return_tensors="pt", max_length=self.max_length
+                    pairs,
+                    padding=True,
+                    truncation=True,
+                    return_tensors="pt",
+                    max_length=eff_len,
+                    pad_to_multiple_of=8,
                 )
                 if use_cuda:
                     assert prefetch_stream is not None
@@ -160,7 +203,12 @@ class ElectraReranker(Reranker):
                 batch2 = sections[j : j + self.batch_size]
                 pairs2 = [[query, s] for s in batch2]
                 tok2 = self.tokenizer(
-                    pairs2, padding=True, truncation=True, return_tensors="pt", max_length=self.max_length
+                    pairs2,
+                    padding=True,
+                    truncation=True,
+                    return_tensors="pt",
+                    max_length=eff_len,
+                    pad_to_multiple_of=8,
                 )
                 if use_cuda:
                     with torch.cuda.stream(prefetch_stream):

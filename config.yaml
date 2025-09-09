@@ -45,7 +45,7 @@ deberta_nli_model: tasksource/deberta-base-long-nli
 roberta_nli_model: FacebookAI/roberta-large-mnli
 deberta_v3_nli_model: microsoft/deberta-large-mnli
 #nli_model: MoritzLaurer/DeBERTa-v3-large-mnli-fever-anli-ling-wanli
-nli_max_length: 1024
+nli_max_length: 512 #long 모델 쓸때 1024
 nli_max_cluster: 3
 nli_e_min: 0.4 #Entailment가 이거보다 낮음 탈락 
 nli_margin: 0.2 #ent-con 점수가 이거보다 낮으면 탈락 #0.0 #기존 0.1
