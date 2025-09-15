@@ -35,7 +35,10 @@ bge_conf_threshold: 0.3
 electra_model: cross-encoder/ms-marco-electra-base
 mpnet_model: sentence-transformers/all-mpnet-base-v2 #bi-encoder
 
-# Fusion weights for section ranking (softmax/sigmoid normalized)
+# -------------------------------
+# Reranker/Image Fusion (section ranking)
+# -------------------------------
+# Combined per-section score = rank_img_weight * softmax(img_score) + rank_rerank_weight * sigmoid(rerank_score/temperature)
 rank_img_weight: 0.7
 rank_rerank_weight: 0.3
 rank_text_temp: 2.0   # sigmoid temperature for text reranker scores
@@ -47,9 +50,9 @@ deberta_v3_nli_model: microsoft/deberta-large-mnli
 #nli_model: MoritzLaurer/DeBERTa-v3-large-mnli-fever-anli-ling-wanli
 nli_max_length: 512 #long 모델 쓸때 1024
 nli_max_cluster: 3
-nli_e_min: 0.4 #Entailment가 이거보다 낮음 탈락 
-nli_margin: 0.2 #ent-con 점수가 이거보다 낮으면 탈락 #0.0 #기존 0.1
-nli_tau: 0.20 #α * 내포 - β * 모순 점수가 이거보다 낮음 탈락, 지금αβ는 둘다 1
+nli_e_min: 0.10 #Entailment가 이거보다 낮음 탈락 
+nli_margin: 0.10 #ent-con 점수가 이거보다 낮으면 탈락 #0.0 #기존 0.1
+nli_tau: 0.10 #α * 내포 - β * 모순 점수가 이거보다 낮음 탈락, 지금αβ는 둘다 1
 nli_lambda: 0.7 
 ## Consistency selection parameters
 # C_ij = max(0, alpha*Pe - beta*Pc)
@@ -57,6 +60,9 @@ nli_alpha: 1.0
 nli_beta: 1.0
 # 'consistency' enables greedy pruning; 'clique' uses maximal-clique method
 nli_selection: consistency
+# Hybrid cluster scoring (consistency mode):
+# final_cluster_score = nli_hybrid_lambda * normalized_global_consistency + (1 - nli_hybrid_lambda) * mean(normalized_section_scores)
+nli_hybrid_lambda: 0.3
 
 # NLI model selection
 nli_models:

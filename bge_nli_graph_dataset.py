@@ -147,6 +147,7 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
                     beta=getattr(cfg, "nli_beta", 1.0),
                     batch_size=cfg.nli_batch_size,
                     tau_edge=max(0.0, min(1.0, getattr(cfg, "nli_tau", 0.0))),
+                    hybrid_lambda=getattr(cfg, "nli_hybrid_lambda", 0.5),
                     autocast=getattr(cfg, "nli_autocast", True),
                     autocast_dtype=getattr(cfg, "nli_autocast_dtype", "fp16"),
                 )

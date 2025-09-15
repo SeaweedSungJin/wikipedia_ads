@@ -55,6 +55,9 @@ class Config:
     nli_beta: float = 1.0
     # NLI selection mode: 'clique' (existing) or 'consistency' (greedy pruning)
     nli_selection: str = "consistency"
+    # Hybrid cluster scoring in consistency mode:
+    # final = nli_hybrid_lambda * consistency_norm + (1 - nli_hybrid_lambda) * section_score_norm
+    nli_hybrid_lambda: float = 0.5
     # NLI edge rule: 'avg' (default) or 'both_dir'
     nli_edge_rule: str = "avg"
     # Minimum (entailment - contradiction) required in each direction when using 'both_dir'
