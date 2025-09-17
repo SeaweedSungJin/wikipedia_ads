@@ -7,5 +7,6 @@ check/
 datasets/__pycache__/
 __pycache__/
 *.pyc
-datasets/wiki_images/
+datasets/
 metrics/
+cache/
