@@ -84,6 +84,7 @@ class Config:
     image_device: int | str = 3  # GPU id for image model
     bge_device: int | str = 0  # GPU id or name for BGE reranker
     nli_device: int | str = 0  # GPU id or name for NLI model
+    vlm_device: int | str = 0  # GPU id or name for VLM model (separate from reranker to avoid OOM)
     nli_batch_size: int = 32  # Pairwise NLI comparisons per batch
 
     @property

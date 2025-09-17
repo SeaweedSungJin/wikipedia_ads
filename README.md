@@ -3,7 +3,7 @@
 This project implements a retrieval‑augmented pipeline to answer visual questions using Wikipedia. Given a question and its accompanying image, the system retrieves relevant articles via image similarity, segments them into sections, reranks those sections with text models, and selects high‑confidence sections using entropy of BGE cross‑encoder scores.
 
 ## Recent Updates
-- Introduced a unified `Reranker` interface (`src/rerankers.py`) with pluggable implementations for BGE, Electra and Jina M0. The pipeline now calls a single `score(query, sections)` method.
+- Introduced a unified `Reranker` interface (`src/rerankers.py`) with pluggable implementations for BGE, Electra and Jina v1 (tiny/turbo). The pipeline now calls a single `score(query, sections)` method.
 - Moved NLI model loading into `src/models.py` (`load_nli_model`) to be consistent with other loaders and removed the loader from `src/nli_cluster.py`.
 - Added `resolve_device` to standardize device selection with CPU fallback.
 - Capped NLI tokenization to each model's supported context length to prevent overflow on RoBERTa/DeBERTa MNLI checkpoints.
@@ -39,7 +39,7 @@ This project implements a retrieval‑augmented pipeline to answer visual questi
 ## Rerankers
 - BGE: set `rerankers.bge: true` and configure `bge_model`, `bge_max_length`, `bge_device`.
 - Electra cross-encoder: set `rerankers.electra: true` and configure `electra_model`. The implementation adapts to regression/binary/3‑class heads.
-- Jina M0: set `rerankers.jina_m0: true`.
+- Jina v1: set `rerankers.jina_tiny: true` (tiny) or `rerankers.jina_turbo: true` (turbo).
 
 Only enable one reranker at a time; later rerankers override earlier similarity scores.
 

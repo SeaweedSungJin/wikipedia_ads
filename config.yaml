@@ -11,6 +11,8 @@ image_device: 0
 bge_device: 1
 nli_device: 2
 nli_batch_size: 512
+# Dedicated device for VLM to avoid sharing memory with reranker
+vlm_device: 3
 dataset_csv: /dataset/evqa/test.csv
 id2name_paths: 
   - /dataset/inaturalist/train_id2name.json
@@ -73,9 +75,10 @@ nli_models:
 # Reranker settings
 rerankers:
   contriever: false
-  jina_m0: false
+  jina_tiny: true
+  jina_turbo: false
   bge: false
-  electra: true
+  electra: false
   mpnet: false
 
 #양방향 실험용

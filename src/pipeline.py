@@ -85,7 +85,9 @@ def search_rag_pipeline(
     image_model, image_processor = load_image_model(device_map=cfg.image_device)
 
     use_contriever = cfg.rerankers.get("contriever", False)
-    use_jina = cfg.rerankers.get("jina_m0", False)
+    use_jina_tiny = cfg.rerankers.get("jina_tiny", False)
+    use_jina_turbo = cfg.rerankers.get("jina_turbo", False)
+    use_jina = use_jina_tiny or use_jina_turbo
     use_bge = cfg.rerankers.get("bge", False)
     use_electra = cfg.rerankers.get("electra", False)
     use_mpnet = cfg.rerankers.get("mpnet", False)
@@ -271,10 +273,14 @@ def search_rag_pipeline(
     def _apply_rerankers():
         nonlocal filtered_sections
         if use_jina:
-            reranker = JinaReranker(device=cfg.bge_device)
+            model_name = (
+                "jinaai/jina-reranker-v1-turbo-en" if use_jina_turbo else "jinaai/jina-reranker-v1-tiny-en"
+            )
+            reranker = JinaReranker(model_name=model_name, device=cfg.bge_device)
             scores = reranker.score(cfg.text_query, [s["section_text"] for s in filtered_sections])
             for sec, score in zip(filtered_sections, scores):
                 sec["similarity"] = float(score)
+                sec["rerank_score"] = float(score)
 
     if use_bge:
         bge_dev = (

@@ -256,17 +256,18 @@ class ElectraReranker(Reranker):
 
 
 class JinaReranker(Reranker):
-    def __init__(self, device: str | int = "cpu"):
+    def __init__(self, model_name: str = "jinaai/jina-reranker-v1-tiny-en", device: str | int = "cpu"):
         dev = f"cuda:{device}" if isinstance(device, int) else device
         if not torch.cuda.is_available() and isinstance(dev, str) and "cuda" in dev:
             dev = "cpu"
-        self.model = load_jina_reranker(dev)
+        self.model = load_jina_reranker(model_name, dev)
 
     @torch.no_grad()
     def score(self, query: str, sections: List[str]) -> List[float]:
         pairs = [[query, s] for s in sections]
         if not pairs:
             return []
-        scores = self.model.compute_score(pairs, max_length=8192, doc_type="text")
+        # Jina v1 rerankers expose compute_score via trust_remote_code
+        scores = self.model.compute_score(pairs)
         # compute_score may return a list of floats; normalize type
         return [float(s) for s in scores]

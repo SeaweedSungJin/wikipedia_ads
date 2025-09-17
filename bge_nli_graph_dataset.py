@@ -33,7 +33,7 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
     else:
         model_name = cfg.deberta_nli_model
     model, tokenizer = load_nli_model(model_name, device)
-    vlm_model, vlm_processor = load_vlm_model(device_map=cfg.bge_device)
+    vlm_model, vlm_processor = load_vlm_model(device_map=cfg.vlm_device)
     print(
         "NLI clustering mode: clique-weighted (ent-contr) using e_min/margin/tau"
     )

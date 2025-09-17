@@ -98,7 +98,7 @@ def main() -> None:
     vlm_model = vlm_processor = None
     if not args.no_vlm:
         try:
-            vlm_model, vlm_processor = load_vlm_model(device_map=cfg.bge_device)
+            vlm_model, vlm_processor = load_vlm_model(device_map=cfg.vlm_device)
         except Exception:
             vlm_model = vlm_processor = None
 

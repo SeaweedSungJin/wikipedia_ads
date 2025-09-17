@@ -31,18 +31,26 @@ from transformers import (
 )
 from sentence_transformers import SentenceTransformer
 
-def load_jina_reranker(device: str | None = None):
-    """Load the Jina cross-encoder reranker model."""
+def load_jina_reranker(model_name: str = "jinaai/jina-reranker-v1-tiny-en", device: str | None = None):
+    """Load a Jina v1 cross-encoder reranker (tiny or turbo)."""
     global _RERANKER_MODEL
-    if _RERANKER_MODEL is None:
-        print("Jina reranker 모델 로딩중...")
-        model = AutoModel.from_pretrained(
-            "jinaai/jina-reranker-m0-GGUF",
+    from transformers import AutoModelForSequenceClassification
+
+    # Reload if cache empty or cached model name differs
+    if _RERANKER_MODEL is None or getattr(_RERANKER_MODEL, "_jina_model_name", None) != model_name:
+        print(f"Jina reranker 모델 로딩중... ({model_name})")
+        model = AutoModelForSequenceClassification.from_pretrained(
+            model_name,
             trust_remote_code=True,
+            num_labels=1,
         )
         if device:
             model.to(device)
         model.eval()
+        try:
+            setattr(model, "_jina_model_name", model_name)
+        except Exception:
+            pass
         _RERANKER_MODEL = model
 
     return _RERANKER_MODEL
