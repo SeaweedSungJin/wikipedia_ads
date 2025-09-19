@@ -18,7 +18,14 @@ from src.pipeline import search_rag_pipeline
 from src.nli_cluster import cluster_sections_clique, cluster_sections_consistency
 from src.models import load_vlm_model, generate_vlm_answer, load_nli_model, resolve_device
 from src.eval import evaluate_example
-from src.utils import normalize_title, normalize_url_to_title, prefetch_image
+from src.evaluation_utils import (
+    build_ground_truth,
+    compute_k_values,
+    init_recall_dict,
+    update_recall_from_rank,
+    update_section_hits,
+)
+from src.utils import normalize_title, prefetch_image
 from src.metrics_utils import PowerSampler, MetricsSink, stage_meter, Percentiles, env_info
 
 
@@ -106,13 +113,12 @@ def main() -> None:
 
     # Accuracy trackers
     max_k = getattr(cfg, "k_value", 10)
-    base_k = [1, 3, 5, 10]
-    k_values = sorted(set([k for k in base_k if k <= max_k] + [max_k]))
-    img_doc_hits = {k: 0 for k in k_values}
-    bge_doc_hits = {k: 0 for k in k_values}
-    bge_sec_hits = {k: 0 for k in k_values}
-    nli_doc_hits = {k: 0 for k in k_values}
-    nli_sec_hits = {k: 0 for k in k_values}
+    k_values = compute_k_values(max_k)
+    img_doc_hits = init_recall_dict(k_values)
+    bge_doc_hits = init_recall_dict(k_values)
+    bge_sec_hits = init_recall_dict(k_values)
+    nli_doc_hits = init_recall_dict(k_values)
+    nli_sec_hits = init_recall_dict(k_values)
     sample_total = 0
     vlm_total = 0
     vlm_correct = 0
@@ -188,8 +194,6 @@ def main() -> None:
         except Exception as e:
             print(f"[Row {sid}] 파이프라인 실패: {e}")
             continue
-        sample_total += 1
-
         # Log candidate docs scores
         for rank, res in enumerate(img_results, 1):
             doc_title = res.get("doc", {}).get("title", "")
@@ -229,59 +233,31 @@ def main() -> None:
                 s.get("combined_score", None),
             ])
 
-        # Ground truth titles/sections
-        gt_titles_raw = str(sample.wikipedia_title or '').split('|')
-        gt_urls_raw = str(sample.wikipedia_url or '').split('|')
-        gt_titles: list[str] = []
-        for title in gt_titles_raw:
-            if title.strip():
-                gt_titles.append(normalize_title(title))
-        for url in gt_urls_raw:
-            if url.strip():
-                gt_titles.append(normalize_url_to_title(url))
-        gt_title_set = set(gt_titles)
-        sec_ids_raw = sample.metadata.get("evidence_section_id")
-        raw_sections: list[str] = []
-        if isinstance(sec_ids_raw, str):
-            raw_sections = sec_ids_raw.split("|")
-        elif sec_ids_raw is not None:
-            raw_sections = [str(sec_ids_raw)]
-        gt_section_ids = []
-        for s in raw_sections:
-            try:
-                gt_section_ids.append(int(s))
-            except ValueError:
-                continue
-        gt_pairs = set(zip(gt_titles, gt_section_ids))
+        ground_truth = build_ground_truth(sample)
+        if ground_truth is None:
+            continue
+        sample_total += 1
 
         # Image search recall
         doc_rank = None
         for i, res in enumerate(img_results, 1):
             title_norm = normalize_title(res["doc"].get("title"))
-            if title_norm in gt_title_set:
+            if title_norm in ground_truth.title_set:
                 doc_rank = i
                 break
-        for k in k_values:
-            if doc_rank is not None and doc_rank <= k:
-                img_doc_hits[k] += 1
+        update_recall_from_rank(img_doc_hits, doc_rank, k_values)
 
         if candidate_sections:
-            for k in k_values:
-                subset = candidate_sections[:k]
-                if any(
-                    normalize_title(sec.get("doc_title")) in gt_title_set
-                    for sec in subset
-                ):
-                    bge_doc_hits[k] += 1
-                if any(
-                    (
-                        normalize_title(sec.get("doc_title")),
-                        sec.get("section_id"),
-                    )
-                    in gt_pairs
-                    for sec in subset
-                ):
-                    bge_sec_hits[k] += 1
+            update_section_hits(
+                range(len(candidate_sections)),
+                candidate_sections,
+                ground_truth,
+                bge_doc_hits,
+                bge_sec_hits,
+                k_values,
+                lambda sec: sec.get("doc_title", ""),
+                lambda sec: sec.get("section_id"),
+            )
 
             # NLI stage timing/energy
             with stage_meter("nli", sink, sid, device=device_nli, power=ps_nli, is_warmup=warmup):
@@ -297,6 +273,7 @@ def main() -> None:
                         batch_size=cfg.nli_batch_size,
                         tau_edge=max(0.0, min(1.0, getattr(cfg, "nli_tau", 0.0))),
                         hybrid_lambda=getattr(cfg, "nli_hybrid_lambda", 0.5),
+                        target_size=getattr(cfg, "nli_max_cluster", 3),
                         autocast=getattr(cfg, "nli_autocast", True),
                         autocast_dtype=getattr(cfg, "nli_autocast_dtype", "fp16"),
                     )
@@ -363,7 +340,7 @@ def main() -> None:
                 cl_subset = clusters[:k]
                 secs = [s for cl in cl_subset for s in cl["sections"]]
                 if any(
-                    normalize_title(sec.get("doc_title")) in gt_title_set
+                    normalize_title(sec.get("doc_title")) in ground_truth.title_set
                     for sec in secs
                 ):
                     nli_doc_hits[k] += 1
@@ -372,7 +349,7 @@ def main() -> None:
                         normalize_title(sec.get("doc_title")),
                         sec.get("section_id"),
                     )
-                    in gt_pairs
+                    in ground_truth.section_pairs
                     for sec in secs
                 ):
                     nli_sec_hits[k] += 1

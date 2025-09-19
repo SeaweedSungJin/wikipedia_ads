@@ -3,6 +3,7 @@ import json
 import os
 import pickle
 from io import BytesIO
+from pathlib import Path
 from typing import Optional, Tuple, List, Dict
 import re
 from urllib.parse import unquote
@@ -123,16 +124,17 @@ def load_kb(knowledge_json_path: str) -> Tuple[List[dict], Dict[str, int]]:
 
 # in src/utils.py
 
-def load_faiss_and_ids(base_path: str, kb_list: List[dict], url_to_idx: Dict[str, int]) -> Tuple[faiss.Index, np.ndarray]:
+def load_faiss_and_ids(base_path: str | os.PathLike[str], kb_list: List[dict], url_to_idx: Dict[str, int]) -> Tuple[faiss.Index, np.ndarray]:
     """
     FAISS 인덱스를 로드하고, pkl 파일의 타입에 따라 ID 매핑을 검증 및 재정렬합니다.
     """
-    index_path = os.path.join(base_path, "kb_index.faiss")
-    ids_path = os.path.join(base_path, "kb_index_ids.pkl")
+    base = Path(base_path)
+    index_path = base / "kb_index.faiss"
+    ids_path = base / "kb_index_ids.pkl"
 
-    index = faiss.read_index(index_path)
-    
-    with open(ids_path, "rb") as f:
+    index = faiss.read_index(str(index_path))
+
+    with ids_path.open("rb") as f:
         mapping = pickle.load(f)
 
     if isinstance(mapping, dict):

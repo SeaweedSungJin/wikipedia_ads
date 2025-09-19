@@ -52,13 +52,14 @@ from src.dataloader import VQADataset
 from src.embedding import encode_image
 from src.models import load_image_model
 from src.segmenter import SectionSegmenter
-from src.utils import (
-    load_faiss_and_ids,
-    load_image,
-    load_kb,
-    normalize_title,
-    normalize_url_to_title,
+from src.evaluation_utils import (
+    build_ground_truth,
+    compute_k_values,
+    init_recall_dict,
+    update_recall_from_rank,
+    update_section_hits,
 )
+from src.utils import load_faiss_and_ids, load_image, load_kb, normalize_title
 
 # -----------------------------------------------------------------------------
 # Helper data structures
@@ -69,6 +70,7 @@ class SectionEntry:
     doc_title: str
     section_idx: int
     section_text: str
+    doc_idx: int
 
 
 @dataclass
@@ -121,6 +123,11 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=256,
         help="Maximum tokenized length for section texts (<= tokenizer limit)",
+    )
+    parser.add_argument(
+        "--clip-cache-dir",
+        default="datasets/clip_cache",
+        help="Directory to cache EVA-CLIP retrieval results",
     )
     return parser.parse_args()
 
@@ -348,39 +355,6 @@ def score_sections(
 
 
 # -----------------------------------------------------------------------------
-# Evaluation helpers
-# -----------------------------------------------------------------------------
-
-K_VALUES = [1, 3, 5, 10]
-
-
-def update_hits(
-    indices: Iterable[int],
-    sections: List[SectionEntry],
-    gt_title_set: set,
-    gt_pairs: set,
-    doc_hits: Dict[int, int],
-    section_hits: Dict[int, int],
-) -> None:
-    idx_list = list(indices)
-    for k in K_VALUES:
-        top_idx = idx_list[:k]
-        if any(
-            normalize_title(sections[i].doc_title) in gt_title_set for i in top_idx
-        ):
-            doc_hits[k] += 1
-        if any(
-            (
-                normalize_title(sections[i].doc_title),
-                sections[i].section_idx,
-            )
-            in gt_pairs
-            for i in top_idx
-        ):
-            section_hits[k] += 1
-
-
-# -----------------------------------------------------------------------------
 # Main execution
 # -----------------------------------------------------------------------------
 
@@ -403,19 +377,49 @@ def main() -> None:
     image_model, image_processor = load_image_model(device_map=cfg.image_device)
     segmenter = SectionSegmenter()
 
+    cache_data = None
+    cache_file: Path | None = None
+    cache_dirty = False
+    if args.clip_cache_dir:
+        cache_root = Path(args.clip_cache_dir)
+        cache_root.mkdir(parents=True, exist_ok=True)
+        model_name = getattr(getattr(image_model, "config", None), "_name_or_path", "eva_clip")
+        safe_name = model_name.replace('/', '__')
+        cache_file = cache_root / f"{safe_name}.json"
+        expected_meta = {
+            "dataset_csv": cfg.dataset_csv,
+            "dataset_start": cfg.dataset_start,
+            "dataset_end": cfg.dataset_end,
+            "k_value": cfg.k_value,
+        }
+        if cache_file.exists():
+            try:
+                cache_data = json.loads(cache_file.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                cache_data = None
+            if not isinstance(cache_data, dict) or "data" not in cache_data:
+                cache_data = None
+            if cache_data is not None and cache_data.get("meta") != expected_meta:
+                cache_data = None
+        if cache_data is None:
+            cache_data = {"meta": expected_meta, "data": {}}
+
     qformer, vis_processor, text_processor = load_qformer_model(
         Path(args.qformer_ckpt), args.qformer_device, args.max_text_length
     )
 
     doc_cache: Dict[int, List[SectionEntry]] = {}
 
-    image_hits = {k: 0 for k in K_VALUES}
-    cls_doc_hits = {k: 0 for k in K_VALUES}
-    cls_section_hits = {k: 0 for k in K_VALUES}
-    maxsim_doc_hits = {k: 0 for k in K_VALUES}
-    maxsim_section_hits = {k: 0 for k in K_VALUES}
-    logsum_doc_hits = {k: 0 for k in K_VALUES}
-    logsum_section_hits = {k: 0 for k in K_VALUES}
+    k_values = compute_k_values(cfg.k_value)
+    image_hits = init_recall_dict(k_values)
+    cls_doc_hits = init_recall_dict(k_values)
+    cls_section_hits = init_recall_dict(k_values)
+    maxsim_doc_hits = init_recall_dict(k_values)
+    maxsim_section_hits = init_recall_dict(k_values)
+    logsum_doc_hits = init_recall_dict(k_values)
+    logsum_section_hits = init_recall_dict(k_values)
+    hybrid_doc_hits = init_recall_dict(k_values)
+    hybrid_section_hits = init_recall_dict(k_values)
 
     total = 0
 
@@ -425,37 +429,9 @@ def main() -> None:
         if not sample.image_paths:
             continue
 
-        gt_titles_raw = str(sample.wikipedia_title or "").split("|")
-        gt_urls_raw = str(sample.wikipedia_url or "").split("|")
-
-        gt_titles: List[str] = []
-        for title in gt_titles_raw:
-            if title.strip():
-                gt_titles.append(normalize_title(title))
-        for url in gt_urls_raw:
-            if url.strip():
-                gt_titles.append(normalize_url_to_title(url))
-
-        if not gt_titles:
+        ground_truth = build_ground_truth(sample)
+        if ground_truth is None:
             continue
-
-        sec_ids_raw = sample.metadata.get("evidence_section_id")
-        section_ids: List[int] = []
-        if isinstance(sec_ids_raw, str):
-            for val in sec_ids_raw.split("|"):
-                if val.strip():
-                    try:
-                        section_ids.append(int(val))
-                    except ValueError:
-                        continue
-        elif sec_ids_raw is not None:
-            try:
-                section_ids.append(int(sec_ids_raw))
-            except ValueError:
-                pass
-
-        gt_pairs = set(zip(gt_titles, section_ids)) if section_ids else set()
-        gt_title_set = set(gt_titles)
 
         total += 1
 
@@ -477,39 +453,53 @@ def main() -> None:
             # Fall back to simple resize if EchoSight processor fails or missing
             image_tensor = image_processor(pil_image, return_tensors="pt").pixel_values[0]
 
-        img_emb = encode_image(pil_image, image_model, image_processor)
-        img_emb_np = img_emb.cpu().numpy().astype("float32")
-        search_k = min(search_expand, faiss_index.ntotal)
-        distances, indices = faiss_index.search(img_emb_np, search_k)
+        row_key = str(sample.row_idx)
+        cache_entry = None
+        if cache_data is not None:
+            cache_entry = cache_data.get("data", {}).get(row_key)
 
-        # Collect unique documents up to k_value
         unique_doc_indices: List[int] = []
-        seen_docs = set()
-        for idx in indices[0]:
-            doc_idx = int(kb_ids[int(idx)])
-            if doc_idx in seen_docs:
-                continue
-            if doc_idx < 0 or doc_idx >= len(kb_list):
-                continue
-            title_norm = normalize_title(kb_list[doc_idx].get("title", ""))
-            if any(phrase in title_norm for phrase in ("list of", "outline of", "index of")):
-                continue
-            unique_doc_indices.append(doc_idx)
-            seen_docs.add(doc_idx)
-            if len(unique_doc_indices) >= cfg.k_value:
-                break
+        doc_scores: Dict[int, float] = {}
+        if cache_entry is not None:
+            unique_doc_indices = [int(v) for v in cache_entry.get("doc_indices", [])]
+            scores = cache_entry.get("doc_scores", [])
+            doc_scores = {unique_doc_indices[i]: float(scores[i]) for i in range(min(len(unique_doc_indices), len(scores)))}
+        else:
+            img_emb = encode_image(pil_image, image_model, image_processor)
+            img_emb_np = img_emb.cpu().numpy().astype("float32")
+            search_k = min(search_expand, faiss_index.ntotal)
+            distances, indices = faiss_index.search(img_emb_np, search_k)
+
+            seen_docs: set[int] = set()
+            for pos, idx in enumerate(indices[0]):
+                doc_idx = int(kb_ids[int(idx)])
+                if doc_idx in seen_docs:
+                    continue
+                if doc_idx < 0 or doc_idx >= len(kb_list):
+                    continue
+                title_norm = normalize_title(kb_list[doc_idx].get("title", ""))
+                if any(phrase in title_norm for phrase in ("list of", "outline of", "index of")):
+                    continue
+                unique_doc_indices.append(doc_idx)
+                doc_scores[doc_idx] = float(distances[0][pos])
+                seen_docs.add(doc_idx)
+                if len(unique_doc_indices) >= cfg.k_value:
+                    break
+
+            if cache_data is not None:
+                cache_data.setdefault("data", {})[row_key] = {
+                    "doc_indices": unique_doc_indices,
+                    "doc_scores": [doc_scores[idx] for idx in unique_doc_indices],
+                }
+                cache_dirty = True
 
         # Image recall
         doc_rank = None
-        ordered_titles = []
         for rank, doc_idx in enumerate(unique_doc_indices, start=1):
             title_norm = normalize_title(kb_list[doc_idx].get("title", ""))
-            ordered_titles.append(title_norm)
-            if title_norm in gt_title_set and doc_rank is None:
+            if title_norm in ground_truth.title_set and doc_rank is None:
                 doc_rank = rank
-        for k in K_VALUES:
-            if doc_rank is not None and doc_rank <= k:
-                image_hits[k] += 1
+        update_recall_from_rank(image_hits, doc_rank, k_values)
 
         if not unique_doc_indices:
             continue
@@ -521,17 +511,22 @@ def main() -> None:
         for doc_idx in unique_doc_indices:
             if doc_idx not in doc_cache:
                 doc = kb_list[doc_idx]
+                doc_title = (doc.get("title", "") or "").strip()
                 segment_entries: List[SectionEntry] = []
                 for seg in segmenter.get_segments(doc):
-                    text = seg.get("section_text", "").strip()
-                    if not text:
+                    raw_text = seg.get("section_text", "").strip()
+                    if not raw_text:
                         continue
-                    processed_text = text_processor(text) if text_processor else text
+                    combined_text = f"{doc_title}: {raw_text}" if doc_title else raw_text
+                    processed_text = (
+                        text_processor(combined_text) if text_processor else combined_text
+                    )
                     segment_entries.append(
                         SectionEntry(
-                            doc_title=doc.get("title", ""),
+                            doc_title=doc_title,
                             section_idx=seg.get("section_idx", -1),
                             section_text=processed_text,
+                            doc_idx=doc_idx,
                         )
                     )
                 doc_cache[doc_idx] = segment_entries
@@ -539,6 +534,10 @@ def main() -> None:
 
         if not sections:
             continue
+
+        vision_scores = torch.tensor(
+            [doc_scores.get(entry.doc_idx, 0.0) for entry in sections], dtype=torch.float32
+        )
 
         # ------------------------------------------------------------------
         # Q-Former encoding & scoring
@@ -563,10 +562,49 @@ def main() -> None:
         idx_cls = torch.argsort(scores.cls_max, descending=True)
         idx_maxsim = torch.argsort(scores.maxsim, descending=True)
         idx_logsum = torch.argsort(scores.logsumexp, descending=True)
-
-        update_hits(idx_cls.tolist(), sections, gt_title_set, gt_pairs, cls_doc_hits, cls_section_hits)
-        update_hits(idx_maxsim.tolist(), sections, gt_title_set, gt_pairs, maxsim_doc_hits, maxsim_section_hits)
-        update_hits(idx_logsum.tolist(), sections, gt_title_set, gt_pairs, logsum_doc_hits, logsum_section_hits)
+        update_section_hits(
+            idx_cls.tolist(),
+            sections,
+            ground_truth,
+            cls_doc_hits,
+            cls_section_hits,
+            k_values,
+            lambda sec: sec.doc_title,
+            lambda sec: sec.section_idx,
+        )
+        maxsim_scores = scores.maxsim.cpu()
+        combo_scores = 0.5 * vision_scores + 0.5 * maxsim_scores
+        idx_combo = torch.argsort(combo_scores, descending=True)
+        update_section_hits(
+            idx_combo.tolist(),
+            sections,
+            ground_truth,
+            hybrid_doc_hits,
+            hybrid_section_hits,
+            k_values,
+            lambda sec: sec.doc_title,
+            lambda sec: sec.section_idx,
+        )
+        update_section_hits(
+            idx_maxsim.tolist(),
+            sections,
+            ground_truth,
+            maxsim_doc_hits,
+            maxsim_section_hits,
+            k_values,
+            lambda sec: sec.doc_title,
+            lambda sec: sec.section_idx,
+        )
+        update_section_hits(
+            idx_logsum.tolist(),
+            sections,
+            ground_truth,
+            logsum_doc_hits,
+            logsum_section_hits,
+            k_values,
+            lambda sec: sec.doc_title,
+            lambda sec: sec.section_idx,
+        )
 
     # ----------------------------------------------------------------------
     # Metrics summary
@@ -576,7 +614,10 @@ def main() -> None:
         return
 
     def to_ratio(hit_dict: Dict[int, int]) -> Dict[str, float]:
-        return {f"R@{k}": hit_dict[k] / total for k in K_VALUES}
+        return {f"R@{k}": hit_dict[k] / total for k in k_values}
+
+    if cache_file is not None and cache_data is not None and cache_dirty:
+        cache_file.write_text(json.dumps(cache_data, ensure_ascii=False), encoding="utf-8")
 
     summary = {
         "total_samples": total,
@@ -593,6 +634,10 @@ def main() -> None:
             "logsumexp": {
                 "doc": to_ratio(logsum_doc_hits),
                 "section": to_ratio(logsum_section_hits),
+            },
+            "vision_maxsim": {
+                "doc": to_ratio(hybrid_doc_hits),
+                "section": to_ratio(hybrid_section_hits),
             },
         },
     }

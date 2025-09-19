@@ -37,6 +37,7 @@ Encyclopedic-VQA 질문을 Wikipedia 기반 지식과 결합해 푸는 RAG(Retri
 - **`rerankers.py`** – BGE/Electra/Jina cross-encoder와 MPNet bi-encoder 래퍼. 배치 프리패치, max_length 자동 클램핑, half precision 지원.
 - **`encoders.py`** – HuggingFace 텍스트 인코더(`HFTextEncoder`)와 Jina M0 멀티모달 인코더 래퍼.
 - **`embedding.py`** – EVA-CLIP 이미지 임베딩과 일반 텍스트 임베딩(평균 풀링 + 정규화) 헬퍼.
+- **`evaluation_utils.py`** – Ground truth 추출과 Recall@K 집계를 위한 공용 헬퍼. 실행 스크립트(`image_search_dataset.py`, `bge_nli_graph_dataset.py`, `metric_dataset.py`, `qformer_reranker_pipeline.py`)에서 공유합니다.
 - **`segmenter.py`** – 섹션/문장/단락 분리 로직과 불필요한 섹션(References 등) 필터링.
 - **`models.py`** – 이미지·텍스트·재순위·VLM·NLI 모델 로더, 장치 헬퍼(`resolve_device`, `setup_cuda`, `get_device`) 및 Jina 임베딩 유틸.
 - **`nli_cluster.py`** – entailment/contradiction 확률로 그래프를 구축하고 `cluster_sections_consistency` 또는 `cluster_sections_clique` 로 상위 클러스터를 선택합니다. 토크나이저/모델 길이 제한을 자동으로 적용합니다.
@@ -78,6 +79,13 @@ python vlm_only_dataset.py
 python metric_dataset.py --warmup_steps 10 --nvml_poll_ms 50 --no_vlm
 #전체 실행 (VLM포함)
 python metric_dataset.py 
+
+# Q-Former reranker (EVA-CLIP 검색 캐시 사용)
+python qformer_reranker_pipeline.py --clip-cache-dir datasets/clip_cache
 ```
+
+`qformer_reranker_pipeline.py`는 `--clip-cache-dir`(기본 `datasets/clip_cache`) 경로에 EVA-CLIP
+검색 결과를 저장해두고, 다음 실행에서는 캐시를 읽어 재검색을 생략한 뒤 Q-Former reranker만
+실행합니다.
 
 `dataset_start`/`dataset_end` 를 조정해 평가 범위를 제한하고, `id2name_paths` + 이미지 루트를 올바르게 지정하면 iNaturalist/Google Landmarks 이미지가 자동으로 매핑됩니다. 검색 파라미터(`k_value`, `m_value`, `search_expand`)와 재순위·NLI 옵션을 바꿔 실험을 진행하세요.

@@ -8,7 +8,14 @@ from src.pipeline import search_rag_pipeline
 from src.nli_cluster import cluster_sections_clique, cluster_sections_consistency
 from src.models import load_vlm_model, generate_vlm_answer, load_nli_model, resolve_device
 from src.eval import evaluate_example
-from src.utils import normalize_title, normalize_url_to_title
+from src.evaluation_utils import (
+    build_ground_truth,
+    compute_k_values,
+    init_recall_dict,
+    update_recall_from_rank,
+    update_section_hits,
+)
+from src.utils import normalize_title
 
 
 def run_bge_nli_graph_dataset(cfg: Config) -> None:
@@ -46,13 +53,12 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
     vlm_total = 0
 
     max_k = getattr(cfg, "k_value", 10)
-    base_k = [1, 3, 5, 10]
-    k_values = sorted(set([k for k in base_k if k <= max_k] + [max_k]))
-    img_doc_hits = {k: 0 for k in k_values}
-    bge_doc_hits = {k: 0 for k in k_values}
-    bge_sec_hits = {k: 0 for k in k_values}
-    nli_doc_hits = {k: 0 for k in k_values}
-    nli_sec_hits = {k: 0 for k in k_values}
+    k_values = compute_k_values(max_k)
+    img_doc_hits = init_recall_dict(k_values)
+    bge_doc_hits = init_recall_dict(k_values)
+    bge_sec_hits = init_recall_dict(k_values)
+    nli_doc_hits = init_recall_dict(k_values)
+    nli_sec_hits = init_recall_dict(k_values)
 
     for sample in dataset:
         if not sample.image_paths:
@@ -66,6 +72,10 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
             print(f"[Row {sample.row_idx}] 이미지 검색 실패: {e}")
             continue
         total_bge_elapsed += bge_elapsed
+
+        ground_truth = build_ground_truth(sample)
+        if ground_truth is None:
+            continue
         sample_total += 1
 
         candidate_sections = [
@@ -78,62 +88,26 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
             for s in top_sections
         ]
 
-        # --- Ground Truth(정답) 파싱 로직 수정 ---
-        gt_titles_raw = str(sample.wikipedia_title or '').split('|')
-        gt_urls_raw = str(sample.wikipedia_url or '').split('|')
-
-        gt_titles: list[str] = []
-        for title in gt_titles_raw:
-            if title.strip():
-                gt_titles.append(normalize_title(title))
-        for url in gt_urls_raw:
-            if url.strip():
-                gt_titles.append(normalize_url_to_title(url))
-        gt_title_set = set(gt_titles)
-        # --- 수정 완료 ---
-
-        sec_ids_raw = sample.metadata.get("evidence_section_id")
-        raw_sections: list[str] = []
-        if isinstance(sec_ids_raw, str):
-            raw_sections = sec_ids_raw.split("|")
-        elif sec_ids_raw is not None:
-            raw_sections = [str(sec_ids_raw)]
-        gt_section_ids = []
-        for s in raw_sections:
-            try:
-                gt_section_ids.append(int(s))
-            except ValueError:
-                continue
-        gt_pairs = set(zip(gt_titles, gt_section_ids))
-
         # Image search evaluation
         doc_rank = None
         for i, res in enumerate(img_results, 1):
             title_norm = normalize_title(res["doc"].get("title"))
-            if title_norm in gt_title_set:
+            if title_norm in ground_truth.title_set:
                 doc_rank = i
                 break
-        for k in k_values:
-            if doc_rank is not None and doc_rank <= k:
-                img_doc_hits[k] += 1
+        update_recall_from_rank(img_doc_hits, doc_rank, k_values)
 
         if candidate_sections:
-            for k in k_values:
-                subset = candidate_sections[:k]
-                if any(
-                    normalize_title(sec.get("doc_title")) in gt_title_set
-                    for sec in subset
-                ):
-                    bge_doc_hits[k] += 1
-                if any(
-                    (
-                        normalize_title(sec.get("doc_title")),
-                        sec.get("section_id"),
-                    )
-                    in gt_pairs
-                    for sec in subset
-                ):
-                    bge_sec_hits[k] += 1
+            update_section_hits(
+                range(len(candidate_sections)),
+                candidate_sections,
+                ground_truth,
+                bge_doc_hits,
+                bge_sec_hits,
+                k_values,
+                lambda sec: sec.get("doc_title", ""),
+                lambda sec: sec.get("section_id"),
+            )
 
             nli_start = time.time()
             if getattr(cfg, "nli_selection", "consistency") == "consistency":
@@ -148,6 +122,7 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
                     batch_size=cfg.nli_batch_size,
                     tau_edge=max(0.0, min(1.0, getattr(cfg, "nli_tau", 0.0))),
                     hybrid_lambda=getattr(cfg, "nli_hybrid_lambda", 0.5),
+                    target_size=getattr(cfg, "nli_max_cluster", 3),
                     autocast=getattr(cfg, "nli_autocast", True),
                     autocast_dtype=getattr(cfg, "nli_autocast_dtype", "fp16"),
                 )
@@ -197,7 +172,7 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
                 cl_subset = clusters[:k]
                 secs = [s for cl in cl_subset for s in cl["sections"]]
                 if any(
-                    normalize_title(sec.get("doc_title")) in gt_title_set
+                    normalize_title(sec.get("doc_title")) in ground_truth.title_set
                     for sec in secs
                 ):
                     nli_doc_hits[k] += 1
@@ -206,7 +181,7 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
                         normalize_title(sec.get("doc_title")),
                         sec.get("section_id"),
                     )
-                    in gt_pairs
+                    in ground_truth.section_pairs
                     for sec in secs
                 ):
                     nli_sec_hits[k] += 1
@@ -215,8 +190,6 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
             nli_elapsed = 0.0
 
         print(f"BGE 검색 시간: {bge_elapsed:.2f}s | NLI 시간: {nli_elapsed:.2f}s")
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
 
     print("\n-- 평가 요약 --")
     print("Image search:")

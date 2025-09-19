@@ -25,10 +25,6 @@ def encode_image(image, model, processor) -> torch.Tensor:
     embedding = embedding.to(dtype=torch.float32, device="cpu")
     # Free GPU memory used for intermediate tensors
     del pixel_values
-    try:
-        torch.cuda.empty_cache()
-    except Exception:
-        pass
 
     # Return embedding on CPU for convenience
     return embedding
@@ -83,15 +79,7 @@ def get_text_embedding(texts: List[str], model, tokenizer, batch_size: int = 32)
 
         # Clear temporary tensors to reduce GPU memory growth
         del batch_inputs, outputs, last_hidden, mask, sum_embeddings, sum_mask, mean_pooled, normed
-        try:
-            torch.cuda.empty_cache()
-        except Exception:
-            pass
 
     # Concatenate all batches and release any cached memory
     all_emb = torch.cat(embeddings, dim=0)
-    try:
-        torch.cuda.empty_cache()
-    except Exception:
-        pass
     return all_emb

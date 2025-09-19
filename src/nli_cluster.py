@@ -399,10 +399,15 @@ def _global_consistency(indices: List[int], weights: List[List[float]]) -> float
     return (2.0 / (m * (m - 1))) * total
 
 
-def _greedy_prune(indices: List[int], weights: List[List[float]]) -> Tuple[List[int], float, List[int]]:
+def _greedy_prune(
+    indices: List[int],
+    weights: List[List[float]],
+    target_size: int,
+) -> Tuple[List[int], float, List[int]]:
     # Precompute pairwise sums to enable O(1) removal deltas
+    target_size = max(1, target_size)
     cur = list(indices)
-    if len(cur) <= 2:
+    if len(cur) <= max(target_size, 2):
         kept = sorted(cur)
         return kept, _global_consistency(kept, weights), []
     m = len(cur)
@@ -422,9 +427,10 @@ def _greedy_prune(indices: List[int], weights: List[List[float]]) -> Tuple[List[
         if size < 2:
             return 0.0
         return (2.0 / (size * (size - 1))) * sC
+    min_size = max(target_size, 2)
     improved = True
     removed: List[int] = []
-    while improved and len(cur) > 2:
+    while improved and len(cur) > min_size:
         improved = False
         base_score = score_of(len(cur), sumC)
         best_gain = 0.0
@@ -449,6 +455,16 @@ def _greedy_prune(indices: List[int], weights: List[List[float]]) -> Tuple[List[
             sumC -= contrib.pop(best_rm, 0.0)
             removed.append(best_rm)
             improved = True
+    while len(cur) > target_size:
+        best_rm = min(cur, key=lambda k: contrib.get(k, 0.0))
+        cur.remove(best_rm)
+        for j in cur:
+            if j == best_rm:
+                continue
+            cij = max(0.0, weights[best_rm][j])
+            contrib[j] -= cij
+        sumC -= contrib.pop(best_rm, 0.0)
+        removed.append(best_rm)
     final_set = sorted(cur)
     final_score = score_of(len(final_set), sumC)
     return final_set, final_score, removed
@@ -467,6 +483,7 @@ def cluster_sections_consistency(
     # adjacency threshold (C_ij > tau_edge forms an edge for component split)
     tau_edge: float = 1e-8,
     hybrid_lambda: float = 0.5,
+    target_size: int = 3,
     autocast: bool = True,
     autocast_dtype: str = "fp16",
 ) -> Tuple[List[dict], dict]:
@@ -481,13 +498,7 @@ def cluster_sections_consistency(
     if not sections:
         return [], {"entailment": 0, "neutral": 0, "contradiction": 0}
 
-    # Compute per-section fused score normalisation (min-max over provided sections)
-    fused_vals = [float(s.get("combined_score", 0.0)) for s in sections]
-    fmin, fmax = (min(fused_vals), max(fused_vals)) if fused_vals else (0.0, 0.0)
-    if fmax > fmin:
-        fused_norm = [(v - fmin) / (fmax - fmin) for v in fused_vals]
-    else:
-        fused_norm = [0.0 for _ in fused_vals]
+    target_size = max(1, target_size)
 
     # Reuse relation graph builder but disable gates, avoid clamping weights
     # Set e_min=0, margin=-1 so all pairs pass; tau=tau_edge to define connectivity only
@@ -513,11 +524,12 @@ def cluster_sections_consistency(
     comps = _connected_components(adj)
     if not comps:
         comps = [[i] for i in range(len(sections))]
+    comps.sort(key=len, reverse=True)
 
     raw_clusters: List[dict] = []
     for comp in comps:
         # Greedy prune main component
-        kept_idx, cons_score, removed_idx = _greedy_prune(comp, weights)
+        kept_idx, cons_score, removed_idx = _greedy_prune(comp, weights, target_size)
         if kept_idx:
             members = [sections[i] for i in kept_idx]
             members.sort(key=lambda s: s.get("similarity", 0.0), reverse=True)
@@ -543,13 +555,18 @@ def cluster_sections_consistency(
             comps_rm = _connected_components(sub_adj)
             for comp_local in comps_rm:
                 orig_nodes = [removed_idx[k] for k in comp_local]
-                # Consistency score for this removed subgraph
-                g = _global_consistency(orig_nodes, weights)
-                members = [sections[i] for i in orig_nodes]
+                if len(orig_nodes) > target_size:
+                    trimmed, g, _ = _greedy_prune(orig_nodes, weights, target_size)
+                else:
+                    trimmed = sorted(orig_nodes)
+                    g = _global_consistency(trimmed, weights)
+                if len(trimmed) < target_size:
+                    continue
+                members = [sections[i] for i in trimmed]
                 members.sort(key=lambda s: s.get("similarity", 0.0), reverse=True)
                 raw_clusters.append({
                     "type": "removed",
-                    "indices": sorted(orig_nodes),
+                    "indices": trimmed,
                     "sections": members,
                     "consistency_raw": float(g),
                 })
@@ -563,25 +580,8 @@ def cluster_sections_consistency(
     for c in raw_clusters:
         raw = c.get("consistency_raw", 0.0)
         c["consistency_norm"] = 0.0 if cmax <= cmin else (raw - cmin) / (cmax - cmin)
+        c["hybrid_score"] = float(raw)
+        c["avg_score"] = float(raw)
 
-    # Compute per-cluster average of section fused score (already min-max normalised above)
-    for c in raw_clusters:
-        idxs = c["indices"]
-        if idxs:
-            avg_sec = sum(fused_norm[i] for i in idxs) / len(idxs)
-        else:
-            avg_sec = 0.0
-        c["section_norm_avg"] = float(avg_sec)
-
-    # Blend into final hybrid score; reuse "avg_score" key for downstream sorting
-    # Weight is taken from config by caller; default 0.5 if missing
-    # We cannot access cfg here; caller will not pass it, so we default then allow caller to post-adjust if desired.
-    # To keep compatibility, we expose both detailed fields and set avg_score to hybrid_score with default lambda=0.5
-    for c in raw_clusters:
-        h = hybrid_lambda * c["consistency_norm"] + (1 - hybrid_lambda) * c["section_norm_avg"]
-        c["hybrid_score"] = float(h)
-        c["avg_score"] = float(h)
-
-    # Final sort by hybrid score desc
     raw_clusters.sort(key=lambda c: c["avg_score"], reverse=True)
     return raw_clusters, stats

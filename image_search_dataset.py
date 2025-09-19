@@ -6,13 +6,13 @@ from src.config import Config
 from src.dataloader import VQADataset
 from src.models import load_image_model
 from src.embedding import encode_image
-from src.utils import (
-    load_faiss_and_ids,
-    load_kb,
-    load_image,
-    normalize_title,
-    normalize_url_to_title,
+from src.evaluation_utils import (
+    build_ground_truth,
+    compute_k_values,
+    init_recall_dict,
+    update_recall_from_rank,
 )
+from src.utils import load_faiss_and_ids, load_kb, load_image, normalize_title
 
 
 def run_image_search_dataset(cfg: Config) -> None:
@@ -48,9 +48,8 @@ def run_image_search_dataset(cfg: Config) -> None:
 
     # --- 2. 평가 준비 ---
 
-    base_k = [1, 3, 5, 10]
-    k_values = sorted(set([k for k in base_k if k <= cfg.k_value] + [cfg.k_value]))
-    doc_hits = {k: 0 for k in k_values}
+    k_values = compute_k_values(cfg.k_value)
+    doc_hits = init_recall_dict(k_values)
     total_questions = 0
 
     search_k = min(cfg.k_value * 20, faiss_index.ntotal)
@@ -60,23 +59,10 @@ def run_image_search_dataset(cfg: Config) -> None:
     for sample in tqdm(dataset, desc="Evaluating Samples"):
         if not sample.image_paths:
             continue
-        
-        # --- Ground Truth(정답) 파싱 로직 수정 ---
-        gt_titles_raw = str(sample.wikipedia_title or '').split('|')
-        gt_urls_raw = str(sample.wikipedia_url or '').split('|')
-
-        gt_titles = set()
-        for title in gt_titles_raw:
-            if title.strip():
-                gt_titles.add(normalize_title(title))
-        for url in gt_urls_raw:
-            if url.strip():
-                gt_titles.add(normalize_url_to_title(url))
-        # --- 수정 완료 ---
-
-        if not gt_titles:
+        ground_truth = build_ground_truth(sample)
+        if ground_truth is None:
             continue
-        
+
         total_questions += 1
 
         try:
@@ -92,32 +78,33 @@ def run_image_search_dataset(cfg: Config) -> None:
         distances, indices = faiss_index.search(img_emb_np, search_k)
 
         # --- 후보군 필터링 및 Recall 계산 ---
-        top_docs = []
+        unique_doc_indices = []
         seen_docs = set()
-        limit = indices.shape[1]
-        for i in range(limit):
-            if len(seen_docs) >= cfg.k_value:
+        for idx in indices[0]:
+            if len(unique_doc_indices) >= cfg.k_value:
                 break
-            
-            faiss_vidx = int(indices[0][i])
-            doc_idx = int(kb_ids[faiss_vidx])
 
+            faiss_vidx = int(idx)
+            doc_idx = int(kb_ids[faiss_vidx])
             if doc_idx in seen_docs:
                 continue
-            
+
             if 0 <= doc_idx < len(kb_list):
-                doc = kb_list[doc_idx]
-                title_norm = normalize_title(doc.get("title", ""))
+                title_norm = normalize_title(kb_list[doc_idx].get("title", ""))
                 if any(p in title_norm for p in ["list of", "outline of", "index of"]):
                     continue
-                
-                top_docs.append(doc)
+
+                unique_doc_indices.append(doc_idx)
                 seen_docs.add(doc_idx)
 
-        for k in k_values:
-            top_k_titles = {normalize_title(doc.get("title")) for doc in top_docs[:k]}
-            if not top_k_titles.isdisjoint(gt_titles):
-                doc_hits[k] += 1
+        doc_rank = None
+        for rank, doc_idx in enumerate(unique_doc_indices, start=1):
+            title_norm = normalize_title(kb_list[doc_idx].get("title", ""))
+            if title_norm in ground_truth.title_set:
+                doc_rank = rank
+                break
+
+        update_recall_from_rank(doc_hits, doc_rank, k_values)
 
     # --- 4. 결과 출력 ---
     if total_questions == 0:
