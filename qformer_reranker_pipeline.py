@@ -420,6 +420,8 @@ def main() -> None:
     logsum_section_hits = init_recall_dict(k_values)
     hybrid_doc_hits = init_recall_dict(k_values)
     hybrid_section_hits = init_recall_dict(k_values)
+    hybrid_cls_doc_hits = init_recall_dict(k_values)
+    hybrid_cls_section_hits = init_recall_dict(k_values)
 
     total = 0
 
@@ -559,9 +561,12 @@ def main() -> None:
 
         scores = score_sections(fusion_tokens, token_embs, cls_embs, token_masks)
 
-        idx_cls = torch.argsort(scores.cls_max, descending=True)
-        idx_maxsim = torch.argsort(scores.maxsim, descending=True)
-        idx_logsum = torch.argsort(scores.logsumexp, descending=True)
+        cls_scores = scores.cls_max.cpu()
+        maxsim_scores = scores.maxsim.cpu()
+        logsum_scores = scores.logsumexp.cpu()
+        idx_cls = torch.argsort(cls_scores, descending=True)
+        idx_maxsim = torch.argsort(maxsim_scores, descending=True)
+        idx_logsum = torch.argsort(logsum_scores, descending=True)
         update_section_hits(
             idx_cls.tolist(),
             sections,
@@ -572,7 +577,6 @@ def main() -> None:
             lambda sec: sec.doc_title,
             lambda sec: sec.section_idx,
         )
-        maxsim_scores = scores.maxsim.cpu()
         combo_scores = 0.5 * vision_scores + 0.5 * maxsim_scores
         idx_combo = torch.argsort(combo_scores, descending=True)
         update_section_hits(
@@ -591,6 +595,18 @@ def main() -> None:
             ground_truth,
             maxsim_doc_hits,
             maxsim_section_hits,
+            k_values,
+            lambda sec: sec.doc_title,
+            lambda sec: sec.section_idx,
+        )
+        cls_combo_scores = 0.5 * vision_scores + 0.5 * cls_scores
+        idx_cls_combo = torch.argsort(cls_combo_scores, descending=True)
+        update_section_hits(
+            idx_cls_combo.tolist(),
+            sections,
+            ground_truth,
+            hybrid_cls_doc_hits,
+            hybrid_cls_section_hits,
             k_values,
             lambda sec: sec.doc_title,
             lambda sec: sec.section_idx,
@@ -638,6 +654,10 @@ def main() -> None:
             "vision_maxsim": {
                 "doc": to_ratio(hybrid_doc_hits),
                 "section": to_ratio(hybrid_section_hits),
+            },
+            "vision_cls_max": {
+                "doc": to_ratio(hybrid_cls_doc_hits),
+                "section": to_ratio(hybrid_cls_section_hits),
             },
         },
     }
