@@ -2,7 +2,7 @@ base_path: /dataset/evqa
 image_path: datasets/real_images/Downside_Abbey.jpg
 kb_json_name: encyclopedic_kb_wiki.json
 text_query: Who built the choir at this abbey?
-k_value: 10
+k_value: 20
 m_value: 10
 alpha: 0.9
 search_expand: 20 # lisf of 같은거 처리용, 이미지 과샘플링

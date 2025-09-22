@@ -26,17 +26,29 @@ import json
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Tuple
+from typing import Dict, Iterable, List, Tuple, Sequence
 
 import torch
 import torch.nn.functional as F
+import numpy as np
+import faiss
 from tqdm import tqdm
 
 # -----------------------------------------------------------------------------
 # Repository-relative imports
 # -----------------------------------------------------------------------------
 ROOT = Path(__file__).resolve().parent
-ECHOSIGHT_ROOT = ROOT.parent / "EchoSight"
+_echosight_candidates = [ROOT / "EchoSight", ROOT.parent / "EchoSight"]
+ECHOSIGHT_ROOT = None
+for _cand in _echosight_candidates:
+    if _cand.exists():
+        ECHOSIGHT_ROOT = _cand
+        break
+if ECHOSIGHT_ROOT is None:
+    raise FileNotFoundError(
+        "EchoSight project not found; expected at one of: "
+        + ", ".join(str(c) for c in _echosight_candidates)
+    )
 if str(ECHOSIGHT_ROOT) not in sys.path:
     sys.path.insert(0, str(ECHOSIGHT_ROOT))
 
@@ -194,10 +206,33 @@ def load_qformer_model(
     qformer = qformer.to(device_obj)
 
     tokenizer = qformer.tokenizer
-    if tokenizer is not None and max_text_length is not None and max_text_length > 0:
-        tokenizer.model_max_length = min(max_text_length, tokenizer.model_max_length)
+    if tokenizer is not None:
+        limits = []
+        if max_text_length is not None and max_text_length > 0:
+            limits.append(max_text_length)
+        txt_cfg_len = getattr(model_cfg, "max_txt_len", None)
+        if txt_cfg_len:
+            limits.append(int(txt_cfg_len))
+        tok_current = getattr(tokenizer, "model_max_length", None)
+        if tok_current and tok_current < 1_000_000:
+            limits.append(int(tok_current))
+        if limits:
+            tokenizer.model_max_length = min(limits)
 
-    vis_proc = vis_processors.get("eval") if vis_processors else None
+    try:
+        from data_utils import targetpad_transform  # type: ignore
+    except Exception:
+        targetpad_transform = None
+
+    image_size = getattr(model_cfg, "image_size", 224)
+    vis_proc = None
+    if targetpad_transform is not None:
+        try:
+            vis_proc = targetpad_transform(1.25, image_size)
+        except Exception:
+            vis_proc = None
+    if vis_proc is None and vis_processors:
+        vis_proc = vis_processors.get("eval")
     txt_proc = txt_processors.get("eval") if txt_processors else None
     return qformer, vis_proc, txt_proc
 
@@ -227,21 +262,10 @@ def encode_sections_text(
     batch_size: int,
     token_keep: int,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Encode section texts and return CLS + token embeddings with masks.
-
-    Returns
-    -------
-    cls_embs: torch.Tensor shape (N, D)
-        Q-Former text embeddings for the [CLS] token.
-    token_embs: torch.Tensor shape (N, token_keep, D)
-        Normalised projections for the first ``token_keep`` tokens (excluding CLS).
-    token_masks: torch.Tensor shape (N, token_keep)
-        Boolean mask indicating valid tokens (False denotes padding).
-    """
+    """Encode section texts using the EchoSight Q-Former forward path."""
 
     device = next(model.parameters()).device
     tokenizer = model.tokenizer
-    text_proj = model.text_proj
 
     cls_chunks: List[torch.Tensor] = []
     token_chunks: List[torch.Tensor] = []
@@ -249,28 +273,24 @@ def encode_sections_text(
 
     for start in range(0, len(texts), batch_size):
         batch = texts[start : start + batch_size]
+        outputs = model.extract_features({"text_input": batch}, mode="text")
+        proj = outputs.text_embeds_proj
+        if proj is None:
+            raise RuntimeError("Q-Former text features not returned by extract_features")
+        proj = proj.to(torch.float32).cpu()
+
+        max_len = getattr(tokenizer, "model_max_length", None)
         tokens = tokenizer(
             batch,
             return_tensors="pt",
             padding="max_length",
             truncation=True,
+            max_length=max_len if isinstance(max_len, int) and max_len > 0 else None,
         )
-        input_ids = tokens.input_ids.to(device)
-        attention_mask = tokens.attention_mask.to(device)
-
-        output = model.Qformer.bert(
-            input_ids,
-            attention_mask=attention_mask,
-            return_dict=True,
-        )
-        hidden = output.last_hidden_state
-        hidden = hidden.to(text_proj.weight.dtype)
-        proj = text_proj(hidden)
-        proj = F.normalize(proj, dim=-1).to(torch.float32).cpu()
+        mask = tokens.attention_mask[:, 1:].to(torch.float32)
 
         cls_chunks.append(proj[:, 0, :])
         token_part = proj[:, 1:, :]
-        mask = tokens.attention_mask[:, 1:].to(torch.float32)
 
         if token_part.shape[1] < token_keep:
             pad_len = token_keep - token_part.shape[1]
@@ -355,6 +375,25 @@ def score_sections(
 
 
 # -----------------------------------------------------------------------------
+# Ranking helpers
+# -----------------------------------------------------------------------------
+
+
+def _dedup_indices_by_doc(indices: Iterable[int], sections: Sequence[SectionEntry]) -> List[int]:
+    """Return indices with at most one entry per document."""
+
+    seen: set[int] = set()
+    deduped: List[int] = []
+    for idx in indices:
+        doc_id = sections[idx].doc_idx
+        if doc_id in seen:
+            continue
+        seen.add(doc_id)
+        deduped.append(idx)
+    return deduped
+
+
+# -----------------------------------------------------------------------------
 # Main execution
 # -----------------------------------------------------------------------------
 
@@ -374,6 +413,17 @@ def main() -> None:
 
     kb_list, url_to_idx = load_kb(cfg.kb_json_path)
     faiss_index, kb_ids = load_faiss_and_ids(cfg.base_path, kb_list, url_to_idx)
+    try:
+        norm = faiss.NormalizationTransform(faiss_index.d, 2)
+        faiss_index = faiss.IndexPreTransform(norm, faiss_index)
+    except Exception:
+        pass
+    if torch.cuda.is_available():
+        try:
+            res = faiss.StandardGpuResources()
+            faiss_index = faiss.index_cpu_to_gpu(res, 0, faiss_index)
+        except Exception:
+            pass
     image_model, image_processor = load_image_model(device_map=cfg.image_device)
     segmenter = SectionSegmenter()
 
@@ -426,6 +476,12 @@ def main() -> None:
     total = 0
 
     search_expand = cfg.search_expand or cfg.k_value * 20
+    max_unique_docs = max(cfg.k_value, search_expand)
+
+    def make_empty_hits() -> Dict[int, int]:
+        """Return a zero-filled recall dictionary that matches ``k_values``."""
+
+        return {k: 0 for k in k_values}
 
     for sample in tqdm(dataset, desc="Evaluating Q-Former Reranker"):
         if not sample.image_paths:
@@ -470,22 +526,27 @@ def main() -> None:
             img_emb = encode_image(pil_image, image_model, image_processor)
             img_emb_np = img_emb.cpu().numpy().astype("float32")
             search_k = min(search_expand, faiss_index.ntotal)
-            distances, indices = faiss_index.search(img_emb_np, search_k)
+            # FAISS returns inner-product scores that depend on index scaling.
+            norm = np.linalg.norm(img_emb_np, ord=2)
+            search_query = img_emb_np if norm == 0 else img_emb_np / norm
+            distances, indices = faiss_index.search(search_query, search_k)
 
             seen_docs: set[int] = set()
             for pos, idx in enumerate(indices[0]):
                 doc_idx = int(kb_ids[int(idx)])
-                if doc_idx in seen_docs:
-                    continue
                 if doc_idx < 0 or doc_idx >= len(kb_list):
                     continue
                 title_norm = normalize_title(kb_list[doc_idx].get("title", ""))
                 if any(phrase in title_norm for phrase in ("list of", "outline of", "index of")):
                     continue
-                unique_doc_indices.append(doc_idx)
-                doc_scores[doc_idx] = float(distances[0][pos])
-                seen_docs.add(doc_idx)
-                if len(unique_doc_indices) >= cfg.k_value:
+                if doc_idx not in seen_docs:
+                    unique_doc_indices.append(doc_idx)
+                    seen_docs.add(doc_idx)
+                if doc_idx not in doc_scores:
+                    doc_scores[doc_idx] = float(distances[0][pos])
+                else:
+                    doc_scores[doc_idx] = max(doc_scores[doc_idx], float(distances[0][pos]))
+                if len(unique_doc_indices) >= max_unique_docs and pos >= search_expand - 1:
                     break
 
             if cache_data is not None:
@@ -519,7 +580,12 @@ def main() -> None:
                     raw_text = seg.get("section_text", "").strip()
                     if not raw_text:
                         continue
-                    combined_text = f"{doc_title}: {raw_text}" if doc_title else raw_text
+                    section_title = (seg.get("section_title", "") or "").strip()
+                    header = (
+                        f"# Wiki Article: {doc_title}\n"
+                        f"## Section Title: {section_title}\n"
+                    )
+                    combined_text = f"{header}{raw_text}"
                     processed_text = (
                         text_processor(combined_text) if text_processor else combined_text
                     )
@@ -544,9 +610,7 @@ def main() -> None:
         # ------------------------------------------------------------------
         # Q-Former encoding & scoring
         # ------------------------------------------------------------------
-        question_text = (
-            text_processor(sample.question) if text_processor else sample.question
-        )
+        question_text = sample.question
         fusion_tokens = encode_query_multimodal(
             qformer, image_tensor.unsqueeze(0), question_text
         )
@@ -579,11 +643,25 @@ def main() -> None:
         )
         combo_scores = 0.5 * vision_scores + 0.5 * maxsim_scores
         idx_combo = torch.argsort(combo_scores, descending=True)
+        dedup_idx_combo = _dedup_indices_by_doc(idx_combo.tolist(), sections)
+        # Deduped rankings are used for document recall, while the full index list
+        # is preserved for section recall so we do not discard valid sections from
+        # the same article.
+        update_section_hits(
+            dedup_idx_combo,
+            sections,
+            ground_truth,
+            hybrid_doc_hits,
+            make_empty_hits(),
+            k_values,
+            lambda sec: sec.doc_title,
+            lambda sec: sec.section_idx,
+        )
         update_section_hits(
             idx_combo.tolist(),
             sections,
             ground_truth,
-            hybrid_doc_hits,
+            make_empty_hits(),
             hybrid_section_hits,
             k_values,
             lambda sec: sec.doc_title,
@@ -601,11 +679,22 @@ def main() -> None:
         )
         cls_combo_scores = 0.5 * vision_scores + 0.5 * cls_scores
         idx_cls_combo = torch.argsort(cls_combo_scores, descending=True)
+        dedup_idx_cls_combo = _dedup_indices_by_doc(idx_cls_combo.tolist(), sections)
+        update_section_hits(
+            dedup_idx_cls_combo,
+            sections,
+            ground_truth,
+            hybrid_cls_doc_hits,
+            make_empty_hits(),
+            k_values,
+            lambda sec: sec.doc_title,
+            lambda sec: sec.section_idx,
+        )
         update_section_hits(
             idx_cls_combo.tolist(),
             sections,
             ground_truth,
-            hybrid_cls_doc_hits,
+            make_empty_hits(),
             hybrid_cls_section_hits,
             k_values,
             lambda sec: sec.doc_title,
