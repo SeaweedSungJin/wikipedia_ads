@@ -7,6 +7,7 @@ module level so that repeated calls do not incur additional load time.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Dict, List, Tuple, Callable, ContextManager, Optional
 import math
 import time
@@ -25,6 +26,12 @@ from .models import (
     load_mpnet_biencoder,
 )
 from .rerankers import BGEReranker, ElectraReranker, JinaReranker
+from .qformer_utils import (
+    load_qformer_resources,
+    encode_query_multimodal,
+    encode_sections_text,
+    score_sections,
+)
 from .encoders import TextEncoder
 from .segmenter import (
     Segmenter,
@@ -38,6 +45,9 @@ _KB_IDS = None
 _KB_LIST = None
 _URL_TO_IDX = None
 _BGE_CACHE = None
+
+_SRC_ROOT = Path(__file__).resolve().parent
+_REPO_ROOT = _SRC_ROOT.parent
 
 def _get_bge(model_name: str, device):
     """Load the BGE reranker once and cache it globally."""
@@ -91,6 +101,7 @@ def search_rag_pipeline(
     use_bge = cfg.rerankers.get("bge", False)
     use_electra = cfg.rerankers.get("electra", False)
     use_mpnet = cfg.rerankers.get("mpnet", False)
+    use_qformer = cfg.rerankers.get("q-former", False) or cfg.rerankers.get("qformer", False)
 
     if text_encoder is None and use_contriever:
         text_encoder = load_text_encoder(cfg.text_encoder_model, device_map="auto")
@@ -270,96 +281,209 @@ def search_rag_pipeline(
             filtered_sections[i]["similarity"] = best_score
 
     # Reranker stage wrapper (encompasses any enabled reranker)
-    def _apply_rerankers():
+    def _apply_rerankers() -> None:
         nonlocal filtered_sections
-        if use_jina:
-            model_name = (
-                "jinaai/jina-reranker-v1-turbo-en" if use_jina_turbo else "jinaai/jina-reranker-v1-tiny-en"
+        if not filtered_sections:
+            return
+        if use_qformer and (use_jina or use_bge or use_electra or use_mpnet):
+            raise ValueError(
+                "Q-Former reranker currently cannot be combined with other rerankers."
             )
-            reranker = JinaReranker(model_name=model_name, device=cfg.bge_device)
-            scores = reranker.score(cfg.text_query, [s["section_text"] for s in filtered_sections])
+
+        if use_bge:
+            bge_dev = (
+                f"cuda:{cfg.bge_device}" if isinstance(cfg.bge_device, int) else cfg.bge_device
+            )
+            if not torch.cuda.is_available() and isinstance(bge_dev, str) and "cuda" in bge_dev:
+                bge_dev = "cpu"
+            reranker = BGEReranker(
+                cfg.bge_model,
+                device=cfg.bge_device,
+                max_length=cfg.bge_max_length,
+                batch_size=cfg.bge_batch_size,
+            )
+            print(
+                f"BGE Reranking {len(filtered_sections)} sections in batches of {cfg.bge_batch_size}..."
+            )
+            scores = reranker.score(
+                cfg.text_query, [s["section_text"] for s in filtered_sections]
+            )
             for sec, score in zip(filtered_sections, scores):
                 sec["similarity"] = float(score)
                 sec["rerank_score"] = float(score)
 
-    if use_bge:
-        bge_dev = (
-            f"cuda:{cfg.bge_device}" if isinstance(cfg.bge_device, int) else cfg.bge_device
-        )
-        if not torch.cuda.is_available() and isinstance(bge_dev, str) and "cuda" in bge_dev:
-            bge_dev = "cpu"
-        reranker = BGEReranker(cfg.bge_model, device=cfg.bge_device, max_length=cfg.bge_max_length, batch_size=cfg.bge_batch_size)
-        print(f"BGE Reranking {len(filtered_sections)} sections in batches of {cfg.bge_batch_size}...")
-        scores = reranker.score(cfg.text_query, [s["section_text"] for s in filtered_sections])
-        for sec, score in zip(filtered_sections, scores):
-            sec["similarity"] = float(score)
-            sec["rerank_score"] = float(score)
+        if use_electra:
+            ce_dev = (
+                f"cuda:{cfg.bge_device}" if isinstance(cfg.bge_device, int) else cfg.bge_device
+            )
+            if not torch.cuda.is_available() and isinstance(ce_dev, str) and "cuda" in ce_dev:
+                ce_dev = "cpu"
+            reranker = ElectraReranker(
+                cfg.electra_model,
+                device=cfg.bge_device,
+                max_length=cfg.bge_max_length,
+                batch_size=cfg.electra_batch_size,
+            )
+            print(
+                f"Electra Reranking {len(filtered_sections)} sections in batches of {cfg.electra_batch_size}..."
+            )
+            scores = reranker.score(
+                cfg.text_query, [s["section_text"] for s in filtered_sections]
+            )
+            for sec, score in zip(filtered_sections, scores):
+                sec["similarity"] = float(score)
+                sec["rerank_score"] = float(score)
 
-    if use_electra:
-        ce_dev = (
-            f"cuda:{cfg.bge_device}" if isinstance(cfg.bge_device, int) else cfg.bge_device
-        )
-        if not torch.cuda.is_available() and isinstance(ce_dev, str) and "cuda" in ce_dev:
-            ce_dev = "cpu"
-        reranker = ElectraReranker(cfg.electra_model, device=cfg.bge_device, max_length=cfg.bge_max_length, batch_size=cfg.electra_batch_size)
-        print(f"Electra Reranking {len(filtered_sections)} sections in batches of {cfg.electra_batch_size}...")
-        scores = reranker.score(cfg.text_query, [s["section_text"] for s in filtered_sections])
-        for sec, score in zip(filtered_sections, scores):
-            sec["similarity"] = float(score)
-            sec["rerank_score"] = float(score)
+        if use_mpnet:
+            mpnet_dev = (
+                f"cuda:{cfg.bge_device}" if isinstance(cfg.bge_device, int) else cfg.bge_device
+            )
+            if not torch.cuda.is_available() and isinstance(mpnet_dev, str) and "cuda" in mpnet_dev:
+                mpnet_dev = "cpu"
+            model = load_mpnet_biencoder(cfg.mpnet_model, mpnet_dev)
+            section_texts_list = [d["section_text"] for d in filtered_sections]
+            query_emb = model.encode(
+                cfg.text_query,
+                convert_to_tensor=True,
+                device=mpnet_dev,
+                normalize_embeddings=True,
+            )
+            sec_embs = model.encode(
+                section_texts_list,
+                batch_size=256,
+                convert_to_tensor=True,
+                device=mpnet_dev,
+                normalize_embeddings=True,
+            )
+            scores = torch.nn.functional.cosine_similarity(
+                sec_embs, query_emb.unsqueeze(0)
+            ).cpu().tolist()
+            for sec, score in zip(filtered_sections, scores):
+                sec["similarity"] = float(score)
+                sec["rerank_score"] = float(score)
 
-    # Apply rerankers inside a stage meter if provided
-    if stage_meter_factory and (use_jina or use_bge or use_electra or use_mpnet):
-        from contextlib import nullcontext
+        if use_jina:
+            model_name = (
+                "jinaai/jina-reranker-v1-turbo-en"
+                if use_jina_turbo
+                else "jinaai/jina-reranker-v1-tiny-en"
+            )
+            reranker = JinaReranker(model_name=model_name, device=cfg.bge_device)
+            scores = reranker.score(
+                cfg.text_query, [s["section_text"] for s in filtered_sections]
+            )
+            for sec, score in zip(filtered_sections, scores):
+                sec["similarity"] = float(score)
+                sec["rerank_score"] = float(score)
+
+        if use_qformer:
+            batch_size = int(getattr(cfg, "qformer_section_batch_size", 32))
+            token_keep = int(getattr(cfg, "qformer_text_token_count", 32))
+            max_txt_len = int(getattr(cfg, "qformer_max_text_length", 256))
+            ckpt_cfg = getattr(cfg, "qformer_ckpt", "datasets/reranker.pth")
+            ckpt_path = Path(ckpt_cfg)
+            if not ckpt_path.is_absolute():
+                ckpt_path = _REPO_ROOT / ckpt_cfg
+            resources = load_qformer_resources(
+                ckpt_path,
+                device=getattr(cfg, "qformer_device", 0),
+                max_text_length=max_txt_len,
+            )
+            try:
+                image_tensor = resources.vis_processor(img)
+            except Exception:
+                image_tensor = image_processor(img, return_tensors="pt").pixel_values[0]
+            fusion_tokens = encode_query_multimodal(
+                resources.model,
+                image_tensor.unsqueeze(0),
+                cfg.text_query,
+            )
+            processed_texts: List[str] = []
+            for sec in filtered_sections:
+                doc_title = sec.get("source_title", "") or ""
+                sec_title = sec.get("section_title", "") or ""
+                header = (
+                    f"# Wiki Article: {doc_title}\n"
+                    f"## Section Title: {sec_title}\n"
+                )
+                combined_text = f"{header}{sec.get('section_text', '')}"
+                if resources.text_processor is not None:
+                    try:
+                        processed = resources.text_processor(combined_text)
+                    except Exception:
+                        processed = combined_text
+                else:
+                    processed = combined_text
+                processed_texts.append(processed)
+
+            if processed_texts:
+                cls_embs, token_embs, token_masks = encode_sections_text(
+                    resources.model,
+                    processed_texts,
+                    batch_size=batch_size,
+                    token_keep=token_keep,
+                )
+                scores = score_sections(fusion_tokens, token_embs, cls_embs, token_masks)
+                cls_scores = scores.cls_max.cpu().tolist()
+                maxsim_scores = scores.maxsim.cpu().tolist()
+                logsumexp_scores = scores.logsumexp.cpu().tolist()
+                for sec, cls_score, maxsim_score, logsum_score in zip(
+                    filtered_sections, cls_scores, maxsim_scores, logsumexp_scores
+                ):
+                    doc_title = sec.get("source_title", "")
+                    sec["rerank_score"] = float(cls_score)
+                    sec["qformer_cls_score"] = float(cls_score)
+                    sec["qformer_maxsim_score"] = float(maxsim_score)
+                    sec["qformer_logsumexp_score"] = float(logsum_score)
+                    sec["vision_score"] = float(doc_img_norm.get(doc_title, 0.0))
+                    sec["similarity"] = float(cls_score)
+
+    use_any_reranker = use_jina or use_bge or use_electra or use_mpnet or use_qformer
+    if stage_meter_factory and use_any_reranker:
         with stage_meter_factory("reranker"):
             _apply_rerankers()
     else:
         _apply_rerankers()
-
-    if use_mpnet:
-        mpnet_dev = (
-            f"cuda:{cfg.bge_device}" if isinstance(cfg.bge_device, int) else cfg.bge_device
-        )
-        if not torch.cuda.is_available() and isinstance(mpnet_dev, str) and "cuda" in mpnet_dev:
-            mpnet_dev = "cpu"
-        model = load_mpnet_biencoder(cfg.mpnet_model, mpnet_dev)
-        section_texts_list = [d["section_text"] for d in filtered_sections]
-        query_emb = model.encode(
-            cfg.text_query,
-            convert_to_tensor=True,
-            device=mpnet_dev,
-            normalize_embeddings=True,
-        )
-        sec_embs = model.encode(
-            section_texts_list,
-            batch_size=256,
-            convert_to_tensor=True,
-            device=mpnet_dev,
-            normalize_embeddings=True,
-        )
-        scores = torch.nn.functional.cosine_similarity(
-            sec_embs, query_emb.unsqueeze(0)
-        ).cpu().tolist()
-        for sec, score in zip(filtered_sections, scores):
-            sec["similarity"] = float(score)
-            sec["rerank_score"] = float(score)
     # Fuse reranker and image scores for section ranking
     # Only applies if a reranker provided similarity scores
-    if filtered_sections and any("rerank_score" in s for s in filtered_sections):
-        rer_vals = np.array([s.get("rerank_score", 0.0) for s in filtered_sections], dtype=np.float64)
-        # Sigmoid normalization with temperature for reranker scores
-        t_txt = float(getattr(cfg, "rank_text_temp", 2.0))
-        if t_txt <= 0:
-            t_txt = 1.0
-        rer_norms = (1.0 / (1.0 + np.exp(-(rer_vals / t_txt)))).tolist()
-        w_img = getattr(cfg, "rank_img_weight", 0.3)
-        w_rer = getattr(cfg, "rank_rerank_weight", 0.7)
-        for sec, rn in zip(filtered_sections, rer_norms):
-            sec["rerank_norm"] = float(rn)
-            img_norm = float(doc_img_norm.get(sec.get("source_title", ""), 0.0))
-            sec["img_norm"] = img_norm
-            sec["combined_score"] = float(w_img * img_norm + w_rer * rn)
-        sort_key = lambda x: x.get("combined_score", x.get("similarity", -1))
+    if filtered_sections:
+        if any("rerank_score" in s for s in filtered_sections):
+            rer_vals = np.array([s.get("rerank_score", 0.0) for s in filtered_sections], dtype=np.float64)
+            # Sigmoid normalization with temperature for reranker scores
+            t_txt = float(getattr(cfg, "rank_text_temp", 2.0))
+            if t_txt <= 0:
+                t_txt = 1.0
+            rer_norms = (1.0 / (1.0 + np.exp(-(rer_vals / t_txt)))).tolist()
+            if use_qformer:
+                w_img = float(getattr(cfg, "qformer_doc_weight", 0.5))
+                w_rer = float(getattr(cfg, "qformer_text_weight", 0.5))
+            else:
+                w_img = getattr(cfg, "rank_img_weight", 0.3)
+                w_rer = getattr(cfg, "rank_rerank_weight", 0.7)
+            total_w = w_img + w_rer
+            if total_w <= 0:
+                w_img = w_rer = 0.5
+            else:
+                w_img /= total_w
+                w_rer /= total_w
+            if use_qformer:
+                print(
+                    f"Q-Former reranking {len(filtered_sections)} sections "
+                    f"(doc_weight={w_img:.2f}, text_weight={w_rer:.2f})"
+                )
+            for sec, rn in zip(filtered_sections, rer_norms):
+                sec["rerank_norm"] = float(rn)
+                img_norm = float(doc_img_norm.get(sec.get("source_title", ""), 0.0))
+                sec["img_norm"] = img_norm
+                combined = w_img * img_norm + w_rer * rn
+                sec["combined_score"] = float(combined)
+                if use_qformer:
+                    sec["vision_score"] = img_norm
+                    sec["qformer_cls_norm"] = float(rn)
+                    sec["similarity"] = float(combined)
+            sort_key = lambda x: x.get("combined_score", x.get("similarity", -1))
+        else:
+            sort_key = lambda x: x.get("similarity", -1)
     else:
         sort_key = lambda x: x.get("similarity", -1)
 
@@ -373,7 +497,7 @@ def search_rag_pipeline(
         # Only consider the top-M sections when computing confidence
         top_m_sections = sorted_sections[: cfg.m_value]
 
-        if (use_bge or use_electra or use_mpnet) and top_m_sections:
+        if (use_bge or use_electra or use_mpnet or use_qformer) and top_m_sections:
             score_tensor = torch.tensor([s.get("similarity", 0.0) for s in top_m_sections])
             probs = torch.softmax(score_tensor, dim=0).tolist()
             for sec, prob in zip(top_m_sections, probs):

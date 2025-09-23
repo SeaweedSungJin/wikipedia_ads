@@ -46,7 +46,10 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
     )
     print("이미지 검색 모드: 문서의 모든 이미지 사용")
 
-    total_bge_elapsed = 0.0
+    use_qformer = cfg.rerankers.get("q-former", False) or cfg.rerankers.get("qformer", False)
+    rerank_label = "Q-Former" if use_qformer else "BGE"
+
+    total_rerank_elapsed = 0.0
     total_nli_elapsed = 0.0
     sample_total = 0
     vlm_correct = 0
@@ -55,8 +58,8 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
     max_k = getattr(cfg, "k_value", 10)
     k_values = compute_k_values(max_k)
     img_doc_hits = init_recall_dict(k_values)
-    bge_doc_hits = init_recall_dict(k_values)
-    bge_sec_hits = init_recall_dict(k_values)
+    rerank_doc_hits = init_recall_dict(k_values)
+    rerank_sec_hits = init_recall_dict(k_values)
     nli_doc_hits = init_recall_dict(k_values)
     nli_sec_hits = init_recall_dict(k_values)
 
@@ -67,11 +70,11 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
         cfg.text_query = sample.question
 
         try:
-            img_results, top_sections, _, bge_elapsed = search_rag_pipeline(cfg)
+            img_results, top_sections, _, rerank_elapsed = search_rag_pipeline(cfg)
         except Exception as e:
             print(f"[Row {sample.row_idx}] 이미지 검색 실패: {e}")
             continue
-        total_bge_elapsed += bge_elapsed
+        total_rerank_elapsed += rerank_elapsed
 
         ground_truth = build_ground_truth(sample)
         if ground_truth is None:
@@ -102,8 +105,8 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
                 range(len(candidate_sections)),
                 candidate_sections,
                 ground_truth,
-                bge_doc_hits,
-                bge_sec_hits,
+                rerank_doc_hits,
+                rerank_sec_hits,
                 k_values,
                 lambda sec: sec.get("doc_title", ""),
                 lambda sec: sec.get("section_id"),
@@ -189,23 +192,23 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
             print("섹션 결과가 없습니다.")
             nli_elapsed = 0.0
 
-        print(f"BGE 검색 시간: {bge_elapsed:.2f}s | NLI 시간: {nli_elapsed:.2f}s")
+        print(f"{rerank_label} 검색 시간: {rerank_elapsed:.2f}s | NLI 시간: {nli_elapsed:.2f}s")
 
     print("\n-- 평가 요약 --")
     print("Image search:")
     for k in k_values:
         print(f"  Recall@{k} 문서 일치: {img_doc_hits[k]}/{sample_total}")
-    print("BGE reranker:")
+    print(f"{rerank_label} reranker:")
     for k in k_values:
-        print(f"  Recall@{k} 문서 일치: {bge_doc_hits[k]}/{sample_total}")
-        print(f"  Recall@{k} 문서+섹션 일치: {bge_sec_hits[k]}/{sample_total}")
+        print(f"  Recall@{k} 문서 일치: {rerank_doc_hits[k]}/{sample_total}")
+        print(f"  Recall@{k} 문서+섹션 일치: {rerank_sec_hits[k]}/{sample_total}")
     print("NLI clustering (graph):")
     for k in k_values:
         print(f"  Recall@{k} 문서 일치: {nli_doc_hits[k]}/{sample_total}")
         print(f"  Recall@{k} 문서+섹션 일치: {nli_sec_hits[k]}/{sample_total}")
-    print(f"BGE 검색 시간 합계: {total_bge_elapsed:.2f}s")
+    print(f"{rerank_label} 검색 시간 합계: {total_rerank_elapsed:.2f}s")
     print(f"NLI 클러스터링 시간 합계: {total_nli_elapsed:.2f}s")
-    print(f"총 검색 시간 합계: {total_bge_elapsed + total_nli_elapsed:.2f}s")
+    print(f"총 검색 시간 합계: {total_rerank_elapsed + total_nli_elapsed:.2f}s")
     if vlm_total:
         print(f"VLM 정답률: {vlm_correct}/{vlm_total}")
 

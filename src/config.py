@@ -39,6 +39,14 @@ class Config:
     rank_img_softmax_temp: float = 1.0
     # Text reranker score: sigmoid(score / temp)
     rank_text_temp: float = 2.0
+    # Q-Former integration
+    qformer_ckpt: str = "datasets/reranker.pth"
+    qformer_device: int | str = 0
+    qformer_section_batch_size: int = 32
+    qformer_text_token_count: int = 32
+    qformer_max_text_length: int = 256
+    qformer_doc_weight: float = 0.5
+    qformer_text_weight: float = 0.5
     # NLI model names
     deberta_nli_model: str = "tasksource/deberta-base-long-nli"
     roberta_nli_model: str = "FacebookAI/roberta-large-mnli"

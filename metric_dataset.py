@@ -115,8 +115,8 @@ def main() -> None:
     max_k = getattr(cfg, "k_value", 10)
     k_values = compute_k_values(max_k)
     img_doc_hits = init_recall_dict(k_values)
-    bge_doc_hits = init_recall_dict(k_values)
-    bge_sec_hits = init_recall_dict(k_values)
+    rerank_doc_hits = init_recall_dict(k_values)
+    rerank_sec_hits = init_recall_dict(k_values)
     nli_doc_hits = init_recall_dict(k_values)
     nli_sec_hits = init_recall_dict(k_values)
     sample_total = 0
@@ -252,8 +252,8 @@ def main() -> None:
                 range(len(candidate_sections)),
                 candidate_sections,
                 ground_truth,
-                bge_doc_hits,
-                bge_sec_hits,
+                rerank_doc_hits,
+                rerank_sec_hits,
                 k_values,
                 lambda sec: sec.get("doc_title", ""),
                 lambda sec: sec.get("section_id"),
@@ -363,8 +363,8 @@ def main() -> None:
         "accuracy": {
             "image_search": {f"recall@{k}": img_doc_hits[k] for k in k_values},
             "reranker": {
-                **{f"doc_recall@{k}": bge_doc_hits[k] for k in k_values},
-                **{f"sec_recall@{k}": bge_sec_hits[k] for k in k_values},
+                **{f"doc_recall@{k}": rerank_doc_hits[k] for k in k_values},
+                **{f"sec_recall@{k}": rerank_sec_hits[k] for k in k_values},
                 "MRR@10": None,
             },
             "nli": {

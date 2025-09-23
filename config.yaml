@@ -75,11 +75,12 @@ nli_models:
 # Reranker settings
 rerankers:
   contriever: false
-  jina_tiny: true
+  jina_tiny: false
   jina_turbo: false
   bge: false
   electra: false
   mpnet: false
+  q-former: true
 
 #양방향 실험용
   nli_edge_rule: avg #both_dir or avg
