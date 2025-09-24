@@ -64,7 +64,7 @@ nli_beta: 1.0
 nli_selection: consistency
 # Hybrid cluster scoring (consistency mode):
 # final_cluster_score = nli_hybrid_lambda * normalized_global_consistency + (1 - nli_hybrid_lambda) * mean(normalized_section_scores)
-nli_hybrid_lambda: 0.3
+nli_hybrid_lambda: 1
 
 # NLI model selection
 nli_models:

@@ -387,6 +387,12 @@ def _connected_components(adj: List[Set[int]]) -> List[List[int]]:
 
 
 def _global_consistency(indices: List[int], weights: List[List[float]]) -> float:
+    """Average signed pairwise weight within a set of nodes.
+
+    Unlike the previous variant that clipped negatives with ``max(0, w)``,
+    this version treats contradictions (negative weights) as penalties so that
+    incoherent groups receive lower consistency scores.
+    """
     m = len(indices)
     if m < 2:
         return 0.0
@@ -395,7 +401,7 @@ def _global_consistency(indices: List[int], weights: List[List[float]]) -> float
         ia = indices[a]
         for b in range(a + 1, m):
             ib = indices[b]
-            total += max(0.0, weights[ia][ib])
+            total += float(weights[ia][ib])
     return (2.0 / (m * (m - 1))) * total
 
 
@@ -411,15 +417,15 @@ def _greedy_prune(
         kept = sorted(cur)
         return kept, _global_consistency(kept, weights), []
     m = len(cur)
-    # sumC: total sum over pairs i<j of max(0, w)
+    # sumC: total sum over pairs i<j of signed weights
     sumC = 0.0
-    # contrib[k]: sum over j!=k of max(0, w_{k,j}) within current set
+    # contrib[k]: sum over j!=k of signed w_{k,j} within current set
     contrib = {k: 0.0 for k in cur}
     for x in range(m):
         i = cur[x]
         for y in range(x + 1, m):
             j = cur[y]
-            cij = max(0.0, weights[i][j])
+            cij = float(weights[i][j])
             sumC += cij
             contrib[i] += cij
             contrib[j] += cij
@@ -450,7 +456,7 @@ def _greedy_prune(
             for j in cur:
                 if j == best_rm:
                     continue
-                cij = max(0.0, weights[best_rm][j])
+                cij = float(weights[best_rm][j])
                 contrib[j] -= cij
             sumC -= contrib.pop(best_rm, 0.0)
             removed.append(best_rm)
@@ -461,7 +467,7 @@ def _greedy_prune(
         for j in cur:
             if j == best_rm:
                 continue
-            cij = max(0.0, weights[best_rm][j])
+            cij = float(weights[best_rm][j])
             contrib[j] -= cij
         sumC -= contrib.pop(best_rm, 0.0)
         removed.append(best_rm)
@@ -486,6 +492,8 @@ def cluster_sections_consistency(
     target_size: int = 3,
     autocast: bool = True,
     autocast_dtype: str = "fp16",
+    edge_rule: str = "avg",
+    dir_margin: float = 0.0,
 ) -> Tuple[List[dict], dict]:
     """Select section clusters by maximizing global consistency via greedy pruning.
 
@@ -500,8 +508,8 @@ def cluster_sections_consistency(
 
     target_size = max(1, target_size)
 
-    # Reuse relation graph builder but disable gates, avoid clamping weights
-    # Set e_min=0, margin=-1 so all pairs pass; tau=tau_edge to define connectivity only
+    # Reuse relation graph builder but disable gates, avoid clamping weights.
+    # Set e_min=0, margin=-1 so all pairs pass; tau=tau_edge defines connectivity only.
     adj, weights, stats = build_relation_graph(
         sections,
         model=model,
@@ -515,8 +523,8 @@ def cluster_sections_consistency(
         margin=-1.0,
         tau=tau_edge,
         batch_size=batch_size,
-        edge_rule="avg",
-        dir_margin=0.0,
+        edge_rule=edge_rule,
+        dir_margin=dir_margin,
         autocast=autocast,
         autocast_dtype=autocast_dtype,
     )
@@ -577,11 +585,34 @@ def cluster_sections_consistency(
         cmin, cmax = min(cons_vals), max(cons_vals)
     else:
         cmin = cmax = 0.0
-    for c in raw_clusters:
-        raw = c.get("consistency_raw", 0.0)
-        c["consistency_norm"] = 0.0 if cmax <= cmin else (raw - cmin) / (cmax - cmin)
-        c["hybrid_score"] = float(raw)
-        c["avg_score"] = float(raw)
 
-    raw_clusters.sort(key=lambda c: c["avg_score"], reverse=True)
+    # Prepare per-section strength normalisation (prefer combined_score -> rerank_norm -> similarity)
+    sec_raw = [
+        float(s.get("combined_score", s.get("rerank_norm", s.get("similarity", 0.0))))
+        for s in sections
+    ]
+    if sec_raw:
+        smin, smax = min(sec_raw), max(sec_raw)
+    else:
+        smin = smax = 0.0
+
+    for c in raw_clusters:
+        raw = float(c.get("consistency_raw", 0.0))
+        cons_norm = 0.0 if cmax <= cmin else (raw - cmin) / (cmax - cmin)
+        c["consistency_norm"] = float(cons_norm)
+        # Mean section strength within the cluster (min-max over this sample)
+        idxs = c.get("indices", [])
+        if idxs:
+            vals = [sec_raw[i] for i in idxs]
+            sec_norm = 0.0 if smax <= smin else sum((v - smin) / (smax - smin) for v in vals) / len(vals)
+        else:
+            sec_norm = 0.0
+        c["section_norm_avg"] = float(sec_norm)
+        # Blend consistency and section strength
+        lam = max(0.0, min(1.0, float(hybrid_lambda)))
+        hybrid = lam * cons_norm + (1.0 - lam) * sec_norm
+        c["hybrid_score"] = float(hybrid)
+        c["avg_score"] = float(hybrid)
+
+    raw_clusters.sort(key=lambda c: c.get("avg_score", 0.0), reverse=True)
     return raw_clusters, stats

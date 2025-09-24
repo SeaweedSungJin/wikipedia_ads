@@ -273,6 +273,8 @@ def main() -> None:
                         batch_size=cfg.nli_batch_size,
                         tau_edge=max(0.0, min(1.0, getattr(cfg, "nli_tau", 0.0))),
                         hybrid_lambda=getattr(cfg, "nli_hybrid_lambda", 0.5),
+                        edge_rule=getattr(cfg, "nli_edge_rule", "avg"),
+                        dir_margin=getattr(cfg, "nli_dir_margin", 0.0),
                         target_size=getattr(cfg, "nli_max_cluster", 3),
                         autocast=getattr(cfg, "nli_autocast", True),
                         autocast_dtype=getattr(cfg, "nli_autocast_dtype", "fp16"),
