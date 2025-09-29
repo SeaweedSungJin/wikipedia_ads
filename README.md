@@ -15,7 +15,6 @@ Encyclopedic-VQA 질문을 Wikipedia 기반 지식과 결합해 푸는 RAG(Retri
 
 ## Entry Points
 - **`bge_nli_graph_dataset.py`** – 데이터셋 구간(`dataset_start`, `dataset_end`)마다 전체 파이프라인을 수행합니다. 이미지/BGE/NLI 단계별 Recall@K, 재순위·NLI 소요 시간, VLM 정확도를 출력합니다.
-- **`image_search_dataset.py`** – 이미지 임베딩 + FAISS 검색만 실행해 Recall@K를 측정합니다. KB/FAISS는 최초 한 번만 로드하며, 제목·URL 정규화를 통해 정답을 비교합니다.
 - **`vlm_only_dataset.py`** – 검색 단계를 건너뛰고 질문과 이미지를 직접 LLaVA에 넣어 기본 VLM 정확도를 계산합니다.
 - **`metric_dataset.py`** – 동일 파이프라인을 실행하면서 단계별(latency/VRAM/에너지) 지표를 수집합니다. Warmup 샘플(`--warmup_steps`)은 자원 통계에서 제외되지만 정확도 집계에는 포함됩니다.
 
@@ -37,7 +36,7 @@ Encyclopedic-VQA 질문을 Wikipedia 기반 지식과 결합해 푸는 RAG(Retri
 - **`rerankers.py`** – BGE/Electra/Jina cross-encoder와 MPNet bi-encoder 래퍼. 배치 프리패치, max_length 자동 클램핑, half precision 지원.
 - **`encoders.py`** – HuggingFace 텍스트 인코더(`HFTextEncoder`)와 Jina M0 멀티모달 인코더 래퍼.
 - **`embedding.py`** – EVA-CLIP 이미지 임베딩과 일반 텍스트 임베딩(평균 풀링 + 정규화) 헬퍼.
-- **`evaluation_utils.py`** – Ground truth 추출과 Recall@K 집계를 위한 공용 헬퍼. 실행 스크립트(`image_search_dataset.py`, `bge_nli_graph_dataset.py`, `metric_dataset.py`, `qformer_reranker_pipeline.py`)에서 공유합니다.
+- **`evaluation_utils.py`** – Ground truth 추출과 Recall@K 집계를 위한 공용 헬퍼. 실행 스크립트(`bge_nli_graph_dataset.py`, `metric_dataset.py`, `qformer_reranker_pipeline.py`)에서 공유합니다.
 - **`segmenter.py`** – 섹션/문장/단락 분리 로직과 불필요한 섹션(References 등) 필터링.
 - **`models.py`** – 이미지·텍스트·재순위·VLM·NLI 모델 로더, 장치 헬퍼(`resolve_device`, `setup_cuda`, `get_device`) 및 Jina 임베딩 유틸.
 - **`nli_cluster.py`** – entailment/contradiction 확률로 그래프를 구축하고 `cluster_sections_consistency` 또는 `cluster_sections_clique` 로 상위 클러스터를 선택합니다. 토크나이저/모델 길이 제한을 자동으로 적용합니다.
@@ -68,9 +67,6 @@ pip install -r requirements.txt
 
 # 전체 파이프라인 + VLM 평가
 python bge_nli_graph_dataset.py
-
-# 이미지 검색 성능만 측정
-python image_search_dataset.py
 
 # VLM 단독 성능 확인
 python vlm_only_dataset.py

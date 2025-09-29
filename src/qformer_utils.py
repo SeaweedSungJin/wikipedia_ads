@@ -1,15 +1,13 @@
-"""Shared utilities for running the EchoSight Q-Former reranker."""
+"""Utilities for loading and scoring with the Q-Former reranker."""
 from __future__ import annotations
 
-import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Callable, Dict, List, Tuple
 
 import torch
 import torch.nn.functional as F
 
-# These imports require the EchoSight repository to be available.
 from omegaconf import OmegaConf  # type: ignore
 from lavis.models import load_preprocess  # type: ignore
 from lavis.models.blip2_models.blip2_qformer_reranker import (  # type: ignore
@@ -17,24 +15,8 @@ from lavis.models.blip2_models.blip2_qformer_reranker import (  # type: ignore
 )
 
 ROOT = Path(__file__).resolve().parent
-_ECHOSIGHT_CANDIDATES = [ROOT / "EchoSight", ROOT.parent / "EchoSight"]
-ECHOSIGHT_ROOT: Path | None = None
-for _cand in _ECHOSIGHT_CANDIDATES:
-    if _cand.exists():
-        ECHOSIGHT_ROOT = _cand
-        break
-if ECHOSIGHT_ROOT is None:
-    raise FileNotFoundError(
-        "EchoSight project not found; expected at one of: "
-        + ", ".join(str(c) for c in _ECHOSIGHT_CANDIDATES)
-    )
-if str(ECHOSIGHT_ROOT) not in sys.path:
-    sys.path.insert(0, str(ECHOSIGHT_ROOT))
-
-try:
-    from data_utils import targetpad_transform  # type: ignore
-except Exception:
-    targetpad_transform = None
+CONFIG_ROOT = ROOT.parent / "lavis" / "configs" / "models" / "blip2"
+DEFAULT_CONFIG_PATH = CONFIG_ROOT / "blip2_pretrain.yaml"
 
 
 @dataclass(frozen=True)
@@ -69,7 +51,7 @@ def load_qformer_resources(
     device: str | int | torch.device = "cuda:0",
     max_text_length: int | None = 256,
 ) -> QFormerResources:
-    """Load the EchoSight Q-Former reranker and preprocessing utilities."""
+    """Load the BLIP-2 Q-Former reranker and its preprocessors."""
 
     if not ckpt_path.exists():
         raise FileNotFoundError(f"Q-Former checkpoint not found: {ckpt_path}")
@@ -82,14 +64,12 @@ def load_qformer_resources(
     if cached is not None:
         return cached
 
-    cfg_path = (
-        ECHOSIGHT_ROOT
-        / "lavis"
-        / "configs"
-        / "models"
-        / "blip2"
-        / "blip2_pretrain.yaml"
-    )
+    cfg_path = DEFAULT_CONFIG_PATH
+    if not cfg_path.exists():
+        raise FileNotFoundError(
+            "BLIP-2 Q-Former config not found. Expected at " f"{cfg_path}."
+            " Ensure the bundled lavis configs are available."
+        )
     cfg = OmegaConf.load(cfg_path)
     OmegaConf.set_readonly(cfg, False)
     model_cfg = cfg.model
@@ -154,13 +134,7 @@ def load_qformer_resources(
             tokenizer.model_max_length = min(limits)
 
     vis_proc = None
-    image_size = getattr(model_cfg, "image_size", 224)
-    if targetpad_transform is not None:
-        try:
-            vis_proc = targetpad_transform(1.25, image_size)
-        except Exception:
-            vis_proc = None
-    if vis_proc is None and vis_processors:
+    if vis_processors:
         vis_proc = vis_processors.get("eval")
     txt_proc = txt_processors.get("eval") if txt_processors else None
 
@@ -194,7 +168,7 @@ def encode_sections_text(
     batch_size: int,
     token_keep: int,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Encode section texts using the EchoSight Q-Former forward path."""
+    """Encode section texts using the BLIP-2 Q-Former text encoder."""
 
     device = next(model.parameters()).device
     tokenizer = model.tokenizer
@@ -298,5 +272,3 @@ def score_sections(
         fusion_tokens, section_tokens, token_masks
     )
     return ScoringResults(scores_cls, scores_maxsim, scores_logsumexp)
-
-
