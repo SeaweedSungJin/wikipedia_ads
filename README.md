@@ -23,7 +23,7 @@ Encyclopedic-VQA 질문을 Wikipedia 기반 지식과 결합해 푸는 RAG(Retri
 - **검색 파라미터**: `k_value`, `m_value`, `search_expand`, `alpha`
 - **세그먼트 옵션**: `segment_level` (section/paragraph/sentence), `chunk_size`
 - **재순위 설정**: `rerankers` 플래그(`contriever`, `jina_tiny`, `jina_turbo`, `bge`, `electra`, `mpnet`), `bge_model`, `bge_batch_size`, `electra_model`, `electra_batch_size`, `mpnet_model`
-- **점수 결합/필터링**: `rank_img_weight`, `rank_rerank_weight`, `rank_img_softmax_temp`, `rank_text_temp`, `bge_conf_threshold`
+- **점수 결합/필터링**: `rank_img_ratio`, `bge_conf_threshold`
 - **NLI**: `nli_models` 토글(deberta/roberta/deberta_v3), `nli_max_length`, `nli_batch_size`, `nli_e_min`, `nli_margin`, `nli_tau`, `nli_lambda`, `nli_selection`, `nli_hybrid_lambda`, `nli_edge_rule`, `nli_dir_margin`, `nli_autocast`, `nli_autocast_dtype`
 - **디바이스**: `image_device`, `bge_device`, `nli_device`, `vlm_device` (정수 또는 `cuda:0` 형태). CUDA 사용 불가 시 자동으로 CPU로 대체합니다.
 

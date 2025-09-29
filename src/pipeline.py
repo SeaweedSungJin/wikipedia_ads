@@ -199,27 +199,15 @@ def search_rag_pipeline(
     fused_embeddings = []
     filtered_sections: List[dict] = []  # ensure defined for all code paths
 
-    # Precompute per-document image score normalization using softmax across retrieved docs
+    # Cache raw image retrieval scores per document (no normalization)
     if top_k_image_results:
-        img_vals = np.array([r.get("similarity", 0.0) for r in top_k_image_results], dtype=np.float64)
-        # Softmax with temperature
-        t_img = float(getattr(cfg, "rank_img_softmax_temp", 1.0))
-        if t_img <= 0:
-            t_img = 1.0
-        x = img_vals / t_img
-        x = x - np.max(x)  # for numerical stability
-        exps = np.exp(x)
-        denom = exps.sum()
-        if denom <= 0 or not np.isfinite(denom):
-            probs = np.full_like(img_vals, 1.0 / max(1, len(img_vals)))
-        else:
-            probs = exps / denom
-        for res, p in zip(top_k_image_results, probs.tolist()):
-            res["img_norm"] = float(p)
-        # Map doc title -> img_norm for quick lookup when scoring sections
-        doc_img_norm = {res["doc"].get("title", ""): res["img_norm"] for res in top_k_image_results}
+        for res in top_k_image_results:
+            raw_score = float(res.get("similarity", 0.0))
+            res["img_score_raw"] = raw_score
+            res["img_norm"] = raw_score  # backwards-compat field
+        doc_img_raw = {res["doc"].get("title", ""): float(res.get("similarity", 0.0)) for res in top_k_image_results}
     else:
-        doc_img_norm = {}
+        doc_img_raw = {}
 
     if use_contriever:
         if text_encoder is None:
@@ -435,7 +423,7 @@ def search_rag_pipeline(
                     sec["qformer_cls_score"] = float(cls_score)
                     sec["qformer_maxsim_score"] = float(maxsim_score)
                     sec["qformer_logsumexp_score"] = float(logsum_score)
-                    sec["vision_score"] = float(doc_img_norm.get(doc_title, 0.0))
+                    sec["vision_score"] = float(doc_img_raw.get(doc_title, 0.0))
                     sec["similarity"] = float(cls_score)
 
     use_any_reranker = use_jina or use_bge or use_electra or use_mpnet or use_qformer
@@ -448,39 +436,28 @@ def search_rag_pipeline(
     # Only applies if a reranker provided similarity scores
     if filtered_sections:
         if any("rerank_score" in s for s in filtered_sections):
-            rer_vals = np.array([s.get("rerank_score", 0.0) for s in filtered_sections], dtype=np.float64)
-            # Sigmoid normalization with temperature for reranker scores
-            t_txt = float(getattr(cfg, "rank_text_temp", 2.0))
-            if t_txt <= 0:
-                t_txt = 1.0
-            rer_norms = (1.0 / (1.0 + np.exp(-(rer_vals / t_txt)))).tolist()
+            rer_vals = [float(s.get("rerank_score", 0.0)) for s in filtered_sections]
+            ratio = float(getattr(cfg, "rank_img_ratio", 0.5))
             if use_qformer:
-                w_img = float(getattr(cfg, "qformer_doc_weight", 0.5))
-                w_rer = float(getattr(cfg, "qformer_text_weight", 0.5))
-            else:
-                w_img = getattr(cfg, "rank_img_weight", 0.3)
-                w_rer = getattr(cfg, "rank_rerank_weight", 0.7)
-            total_w = w_img + w_rer
-            if total_w <= 0:
-                w_img = w_rer = 0.5
-            else:
-                w_img /= total_w
-                w_rer /= total_w
+                ratio = float(getattr(cfg, "qformer_img_ratio", ratio))
+            ratio = max(0.0, min(1.0, ratio))
+            w_img = ratio
+            w_rer = 1.0 - ratio
             if use_qformer:
                 print(
                     f"Q-Former reranking {len(filtered_sections)} sections "
                     f"(doc_weight={w_img:.2f}, text_weight={w_rer:.2f})"
                 )
-            for sec, rn in zip(filtered_sections, rer_norms):
-                sec["rerank_norm"] = float(rn)
-                img_norm = float(doc_img_norm.get(sec.get("source_title", ""), 0.0))
-                sec["img_norm"] = img_norm
-                combined = w_img * img_norm + w_rer * rn
+            for sec, rer_raw in zip(filtered_sections, rer_vals):
+                sec["rerank_norm"] = rer_raw  # keep field name for compatibility
+                img_raw = float(doc_img_raw.get(sec.get("source_title", ""), 0.0))
+                sec["img_norm"] = img_raw
+                combined = w_img * img_raw + w_rer * rer_raw
                 sec["combined_score"] = float(combined)
+                sec["similarity"] = float(combined)
                 if use_qformer:
-                    sec["vision_score"] = img_norm
-                    sec["qformer_cls_norm"] = float(rn)
-                    sec["similarity"] = float(combined)
+                    sec["vision_score"] = img_raw
+                    sec["qformer_cls_norm"] = rer_raw
             sort_key = lambda x: x.get("combined_score", x.get("similarity", -1))
         else:
             sort_key = lambda x: x.get("similarity", -1)

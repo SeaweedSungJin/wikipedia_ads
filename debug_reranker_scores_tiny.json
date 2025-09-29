@@ -1,0 +1,2224 @@
+[
+  {
+    "sample_id": 0,
+    "question": "What kind of medical usage has this plant?",
+    "image_path": "/dataset/inaturalist/val/06214_Plantae_Tracheophyta_Liliopsida_Liliales_Smilacaceae_Smilax_bona-nox/09dd9c22-8cbc-4b19-bbdd-1003986c048c.jpg",
+    "docs_raw": [
+      {
+        "title": "Hakea teretifolia",
+        "raw_score": 0.815538763999939
+      },
+      {
+        "title": "Strophanthus sarmentosus",
+        "raw_score": 0.8052965402603149
+      },
+      {
+        "title": "John Thomas Baldwin",
+        "raw_score": 0.8052965402603149
+      },
+      {
+        "title": "Dalbergia armata",
+        "raw_score": 0.7974250316619873
+      },
+      {
+        "title": "Dalbergia",
+        "raw_score": 0.7974250316619873
+      },
+      {
+        "title": "Alangium salviifolium",
+        "raw_score": 0.7849976420402527
+      },
+      {
+        "title": "Solanum carolinense",
+        "raw_score": 0.7847070693969727
+      },
+      {
+        "title": "Dalbergia horrida",
+        "raw_score": 0.7783792018890381
+      },
+      {
+        "title": "Ceiba",
+        "raw_score": 0.7783582806587219
+      },
+      {
+        "title": "Canthium inerme",
+        "raw_score": 0.775507926940918
+      },
+      {
+        "title": "Myrialepis",
+        "raw_score": 0.7727408409118652
+      },
+      {
+        "title": "Pereskia aculeata",
+        "raw_score": 0.7723407745361328
+      },
+      {
+        "title": "Hawaan Forest",
+        "raw_score": 0.7692873477935791
+      },
+      {
+        "title": "Acacia sensu lato",
+        "raw_score": 0.7682126760482788
+      },
+      {
+        "title": "Vanguerieae",
+        "raw_score": 0.7678765058517456
+      },
+      {
+        "title": "Bridelia retusa",
+        "raw_score": 0.7677908539772034
+      },
+      {
+        "title": "Bridelia",
+        "raw_score": 0.7677908539772034
+      },
+      {
+        "title": "Vachellia collinsii",
+        "raw_score": 0.7653580904006958
+      },
+      {
+        "title": "Lecanopteris sinuosa",
+        "raw_score": 0.7647672891616821
+      },
+      {
+        "title": "Thorns, spines, and prickles",
+        "raw_score": 0.7638845443725586
+      }
+    ],
+    "sections": {
+      "jina": [
+        {
+          "doc_title": "Strophanthus sarmentosus",
+          "section_idx": 0,
+          "section_title": "Strophanthus sarmentosus",
+          "image_score_raw": 0.8052965402603149,
+          "reranker_score_raw": 0.8119384050369263
+        },
+        {
+          "doc_title": "Pereskia aculeata",
+          "section_idx": 5,
+          "section_title": "Ecological significance",
+          "image_score_raw": 0.7723407745361328,
+          "reranker_score_raw": 0.6450368165969849
+        },
+        {
+          "doc_title": "Bridelia",
+          "section_idx": 0,
+          "section_title": "Bridelia",
+          "image_score_raw": 0.7677908539772034,
+          "reranker_score_raw": 0.6444671154022217
+        },
+        {
+          "doc_title": "Alangium salviifolium",
+          "section_idx": 0,
+          "section_title": "Alangium salviifolium",
+          "image_score_raw": 0.7849976420402527,
+          "reranker_score_raw": 0.6099652647972107
+        },
+        {
+          "doc_title": "Acacia sensu lato",
+          "section_idx": 4,
+          "section_title": "Pests",
+          "image_score_raw": 0.7682126760482788,
+          "reranker_score_raw": 0.5837607979774475
+        },
+        {
+          "doc_title": "Canthium inerme",
+          "section_idx": 0,
+          "section_title": "Canthium inerme",
+          "image_score_raw": 0.775507926940918,
+          "reranker_score_raw": 0.5338270664215088
+        },
+        {
+          "doc_title": "Thorns, spines, and prickles",
+          "section_idx": 10,
+          "section_title": "Human uses",
+          "image_score_raw": 0.7638845443725586,
+          "reranker_score_raw": 0.5333587527275085
+        },
+        {
+          "doc_title": "Myrialepis",
+          "section_idx": 0,
+          "section_title": "Myrialepis",
+          "image_score_raw": 0.7727408409118652,
+          "reranker_score_raw": 0.5275099277496338
+        },
+        {
+          "doc_title": "Hakea teretifolia",
+          "section_idx": 4,
+          "section_title": "Use in horticulture",
+          "image_score_raw": 0.815538763999939,
+          "reranker_score_raw": 0.5131279826164246
+        },
+        {
+          "doc_title": "Pereskia aculeata",
+          "section_idx": 6,
+          "section_title": "Control",
+          "image_score_raw": 0.7723407745361328,
+          "reranker_score_raw": 0.4933287799358368
+        },
+        {
+          "doc_title": "Hakea teretifolia",
+          "section_idx": 1,
+          "section_title": "Description",
+          "image_score_raw": 0.815538763999939,
+          "reranker_score_raw": 0.47602999210357666
+        },
+        {
+          "doc_title": "Pereskia aculeata",
+          "section_idx": 0,
+          "section_title": "Pereskia aculeata",
+          "image_score_raw": 0.7723407745361328,
+          "reranker_score_raw": 0.4759807288646698
+        },
+        {
+          "doc_title": "Vanguerieae",
+          "section_idx": 0,
+          "section_title": "Vanguerieae",
+          "image_score_raw": 0.7678765058517456,
+          "reranker_score_raw": 0.47317397594451904
+        },
+        {
+          "doc_title": "Solanum carolinense",
+          "section_idx": 5,
+          "section_title": "Faunal associations and diseases",
+          "image_score_raw": 0.7847070693969727,
+          "reranker_score_raw": 0.4724838137626648
+        },
+        {
+          "doc_title": "Vanguerieae",
+          "section_idx": 4,
+          "section_title": "Uses",
+          "image_score_raw": 0.7678765058517456,
+          "reranker_score_raw": 0.47176456451416016
+        },
+        {
+          "doc_title": "Vachellia collinsii",
+          "section_idx": 0,
+          "section_title": "Vachellia collinsii",
+          "image_score_raw": 0.7653580904006958,
+          "reranker_score_raw": 0.4686695635318756
+        },
+        {
+          "doc_title": "Bridelia retusa",
+          "section_idx": 0,
+          "section_title": "Bridelia retusa",
+          "image_score_raw": 0.7677908539772034,
+          "reranker_score_raw": 0.4512732923030853
+        },
+        {
+          "doc_title": "Solanum carolinense",
+          "section_idx": 0,
+          "section_title": "Solanum carolinense",
+          "image_score_raw": 0.7847070693969727,
+          "reranker_score_raw": 0.45051872730255127
+        },
+        {
+          "doc_title": "Solanum carolinense",
+          "section_idx": 2,
+          "section_title": "Toxicity",
+          "image_score_raw": 0.7847070693969727,
+          "reranker_score_raw": 0.44943100214004517
+        },
+        {
+          "doc_title": "Canthium inerme",
+          "section_idx": 2,
+          "section_title": "Distribution",
+          "image_score_raw": 0.775507926940918,
+          "reranker_score_raw": 0.4457736611366272
+        }
+      ]
+    }
+  },
+  {
+    "sample_id": 1,
+    "question": "In which country or region does this plant grow?",
+    "image_path": "/dataset/inaturalist/val/07605_Plantae_Tracheophyta_Magnoliopsida_Cornales_Cornaceae_Cornus_suecica/ade27a18-0211-48a4-af80-1a2000f97314.jpg",
+    "docs_raw": [
+      {
+        "title": "Fendlerella",
+        "raw_score": 0.844260573387146
+      },
+      {
+        "title": "Fendlera",
+        "raw_score": 0.844260573387146
+      },
+      {
+        "title": "Eucnide",
+        "raw_score": 0.844260573387146
+      },
+      {
+        "title": "Dichroa febrifuga",
+        "raw_score": 0.844260573387146
+      },
+      {
+        "title": "Dichroa",
+        "raw_score": 0.844260573387146
+      },
+      {
+        "title": "Deutzia schneideriana",
+        "raw_score": 0.844260573387146
+      },
+      {
+        "title": "Deutzia ningpoensis",
+        "raw_score": 0.844260573387146
+      },
+      {
+        "title": "Deinanthe",
+        "raw_score": 0.844260573387146
+      },
+      {
+        "title": "Decumaria",
+        "raw_score": 0.844260573387146
+      },
+      {
+        "title": "Cornus walteri",
+        "raw_score": 0.844260573387146
+      },
+      {
+        "title": "Cornus sessilis",
+        "raw_score": 0.844260573387146
+      },
+      {
+        "title": "Cornus glabrata",
+        "raw_score": 0.844260573387146
+      },
+      {
+        "title": "Cornus foemina",
+        "raw_score": 0.844260573387146
+      },
+      {
+        "title": "Cornus capitata",
+        "raw_score": 0.844260573387146
+      },
+      {
+        "title": "Cornus alba",
+        "raw_score": 0.844260573387146
+      },
+      {
+        "title": "Cornaceae",
+        "raw_score": 0.844260573387146
+      },
+      {
+        "title": "Broussaisia",
+        "raw_score": 0.844260573387146
+      },
+      {
+        "title": "Alangium javanicum",
+        "raw_score": 0.844260573387146
+      },
+      {
+        "title": "Alangium chinense",
+        "raw_score": 0.844260573387146
+      },
+      {
+        "title": "Alangiaceae",
+        "raw_score": 0.844260573387146
+      }
+    ],
+    "sections": {
+      "jina": [
+        {
+          "doc_title": "Cornus foemina",
+          "section_idx": 0,
+          "section_title": "Cornus foemina",
+          "image_score_raw": 0.844260573387146,
+          "reranker_score_raw": 0.7499678730964661
+        },
+        {
+          "doc_title": "Alangium javanicum",
+          "section_idx": 0,
+          "section_title": "Alangium javanicum",
+          "image_score_raw": 0.844260573387146,
+          "reranker_score_raw": 0.7445840239524841
+        },
+        {
+          "doc_title": "Deutzia schneideriana",
+          "section_idx": 0,
+          "section_title": "Deutzia schneideriana",
+          "image_score_raw": 0.844260573387146,
+          "reranker_score_raw": 0.7274557948112488
+        },
+        {
+          "doc_title": "Cornus alba",
+          "section_idx": 0,
+          "section_title": "Cornus alba",
+          "image_score_raw": 0.844260573387146,
+          "reranker_score_raw": 0.696297824382782
+        },
+        {
+          "doc_title": "Decumaria",
+          "section_idx": 0,
+          "section_title": "Decumaria",
+          "image_score_raw": 0.844260573387146,
+          "reranker_score_raw": 0.6465151906013489
+        },
+        {
+          "doc_title": "Alangium chinense",
+          "section_idx": 0,
+          "section_title": "Alangium chinense",
+          "image_score_raw": 0.844260573387146,
+          "reranker_score_raw": 0.6462112665176392
+        },
+        {
+          "doc_title": "Cornus capitata",
+          "section_idx": 0,
+          "section_title": "Cornus capitata",
+          "image_score_raw": 0.844260573387146,
+          "reranker_score_raw": 0.6126477122306824
+        },
+        {
+          "doc_title": "Deinanthe",
+          "section_idx": 0,
+          "section_title": "Deinanthe",
+          "image_score_raw": 0.844260573387146,
+          "reranker_score_raw": 0.6112449169158936
+        },
+        {
+          "doc_title": "Cornus walteri",
+          "section_idx": 0,
+          "section_title": "Cornus walteri",
+          "image_score_raw": 0.844260573387146,
+          "reranker_score_raw": 0.5947691202163696
+        },
+        {
+          "doc_title": "Deutzia ningpoensis",
+          "section_idx": 0,
+          "section_title": "Deutzia ningpoensis",
+          "image_score_raw": 0.844260573387146,
+          "reranker_score_raw": 0.5776072144508362
+        },
+        {
+          "doc_title": "Dichroa",
+          "section_idx": 0,
+          "section_title": "Dichroa",
+          "image_score_raw": 0.844260573387146,
+          "reranker_score_raw": 0.5667406320571899
+        },
+        {
+          "doc_title": "Fendlerella",
+          "section_idx": 0,
+          "section_title": "Fendlerella",
+          "image_score_raw": 0.844260573387146,
+          "reranker_score_raw": 0.5144475698471069
+        },
+        {
+          "doc_title": "Broussaisia",
+          "section_idx": 0,
+          "section_title": "Broussaisia",
+          "image_score_raw": 0.844260573387146,
+          "reranker_score_raw": 0.49666526913642883
+        },
+        {
+          "doc_title": "Cornaceae",
+          "section_idx": 0,
+          "section_title": "Cornaceae",
+          "image_score_raw": 0.844260573387146,
+          "reranker_score_raw": 0.479638010263443
+        },
+        {
+          "doc_title": "Dichroa febrifuga",
+          "section_idx": 0,
+          "section_title": "Dichroa febrifuga",
+          "image_score_raw": 0.844260573387146,
+          "reranker_score_raw": 0.4317348003387451
+        },
+        {
+          "doc_title": "Cornus sessilis",
+          "section_idx": 0,
+          "section_title": "Cornus sessilis",
+          "image_score_raw": 0.844260573387146,
+          "reranker_score_raw": 0.42369958758354187
+        },
+        {
+          "doc_title": "Fendlera",
+          "section_idx": 0,
+          "section_title": "Fendlera",
+          "image_score_raw": 0.844260573387146,
+          "reranker_score_raw": 0.39284148812294006
+        },
+        {
+          "doc_title": "Alangiaceae",
+          "section_idx": 0,
+          "section_title": "Alangiaceae",
+          "image_score_raw": 0.844260573387146,
+          "reranker_score_raw": 0.36858826875686646
+        },
+        {
+          "doc_title": "Eucnide",
+          "section_idx": 0,
+          "section_title": "Eucnide",
+          "image_score_raw": 0.844260573387146,
+          "reranker_score_raw": 0.3656983971595764
+        },
+        {
+          "doc_title": "Cornus glabrata",
+          "section_idx": 0,
+          "section_title": "Cornus glabrata",
+          "image_score_raw": 0.844260573387146,
+          "reranker_score_raw": 0.34227454662323
+        }
+      ]
+    }
+  },
+  {
+    "sample_id": 2,
+    "question": "How big can this plant become?",
+    "image_path": "/dataset/inaturalist/val/07605_Plantae_Tracheophyta_Magnoliopsida_Cornales_Cornaceae_Cornus_suecica/4c90a1c2-d25a-4b79-a2f5-1baddc9c6782.jpg",
+    "docs_raw": [
+      {
+        "title": "Fendlerella",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Fendlera",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Eucnide",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Dichroa febrifuga",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Dichroa",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Deutzia schneideriana",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Deutzia ningpoensis",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Deinanthe",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Decumaria",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Cornus walteri",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Cornus sessilis",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Cornus glabrata",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Cornus foemina",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Cornus capitata",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Cornus alba",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Cornaceae",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Broussaisia",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Alangium javanicum",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Alangium chinense",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Alangiaceae",
+        "raw_score": 0.879382848739624
+      }
+    ],
+    "sections": {
+      "jina": [
+        {
+          "doc_title": "Cornus foemina",
+          "section_idx": 0,
+          "section_title": "Cornus foemina",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.7709066271781921
+        },
+        {
+          "doc_title": "Cornus alba",
+          "section_idx": 0,
+          "section_title": "Cornus alba",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.7213211059570312
+        },
+        {
+          "doc_title": "Deinanthe",
+          "section_idx": 0,
+          "section_title": "Deinanthe",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.7208700776100159
+        },
+        {
+          "doc_title": "Deutzia schneideriana",
+          "section_idx": 0,
+          "section_title": "Deutzia schneideriana",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.6922014355659485
+        },
+        {
+          "doc_title": "Cornus walteri",
+          "section_idx": 0,
+          "section_title": "Cornus walteri",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.6602572202682495
+        },
+        {
+          "doc_title": "Decumaria",
+          "section_idx": 0,
+          "section_title": "Decumaria",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.6570042371749878
+        },
+        {
+          "doc_title": "Deutzia ningpoensis",
+          "section_idx": 0,
+          "section_title": "Deutzia ningpoensis",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.5933863520622253
+        },
+        {
+          "doc_title": "Dichroa",
+          "section_idx": 0,
+          "section_title": "Dichroa",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.5792494416236877
+        },
+        {
+          "doc_title": "Broussaisia",
+          "section_idx": 0,
+          "section_title": "Broussaisia",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.5450243949890137
+        },
+        {
+          "doc_title": "Cornaceae",
+          "section_idx": 0,
+          "section_title": "Cornaceae",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.5282827019691467
+        },
+        {
+          "doc_title": "Cornus capitata",
+          "section_idx": 0,
+          "section_title": "Cornus capitata",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.519015371799469
+        },
+        {
+          "doc_title": "Cornus sessilis",
+          "section_idx": 0,
+          "section_title": "Cornus sessilis",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.45370540022850037
+        },
+        {
+          "doc_title": "Alangiaceae",
+          "section_idx": 0,
+          "section_title": "Alangiaceae",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.43790745735168457
+        },
+        {
+          "doc_title": "Alangium javanicum",
+          "section_idx": 0,
+          "section_title": "Alangium javanicum",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.4336400330066681
+        },
+        {
+          "doc_title": "Fendlerella",
+          "section_idx": 0,
+          "section_title": "Fendlerella",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.4267323911190033
+        },
+        {
+          "doc_title": "Alangium chinense",
+          "section_idx": 0,
+          "section_title": "Alangium chinense",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.40926221013069153
+        },
+        {
+          "doc_title": "Dichroa febrifuga",
+          "section_idx": 0,
+          "section_title": "Dichroa febrifuga",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.3841504156589508
+        },
+        {
+          "doc_title": "Cornus glabrata",
+          "section_idx": 0,
+          "section_title": "Cornus glabrata",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.3697054386138916
+        },
+        {
+          "doc_title": "Cornaceae",
+          "section_idx": 1,
+          "section_title": "Fossil record",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.33267101645469666
+        },
+        {
+          "doc_title": "Eucnide",
+          "section_idx": 0,
+          "section_title": "Eucnide",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.3286173939704895
+        }
+      ]
+    }
+  },
+  {
+    "sample_id": 3,
+    "question": "How do the of this plant seeds spread?",
+    "image_path": "/dataset/inaturalist/val/07605_Plantae_Tracheophyta_Magnoliopsida_Cornales_Cornaceae_Cornus_suecica/4c90a1c2-d25a-4b79-a2f5-1baddc9c6782.jpg",
+    "docs_raw": [
+      {
+        "title": "Fendlerella",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Fendlera",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Eucnide",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Dichroa febrifuga",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Dichroa",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Deutzia schneideriana",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Deutzia ningpoensis",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Deinanthe",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Decumaria",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Cornus walteri",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Cornus sessilis",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Cornus glabrata",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Cornus foemina",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Cornus capitata",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Cornus alba",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Cornaceae",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Broussaisia",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Alangium javanicum",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Alangium chinense",
+        "raw_score": 0.879382848739624
+      },
+      {
+        "title": "Alangiaceae",
+        "raw_score": 0.879382848739624
+      }
+    ],
+    "sections": {
+      "jina": [
+        {
+          "doc_title": "Cornus alba",
+          "section_idx": 0,
+          "section_title": "Cornus alba",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.6947768330574036
+        },
+        {
+          "doc_title": "Deutzia ningpoensis",
+          "section_idx": 0,
+          "section_title": "Deutzia ningpoensis",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.6496992111206055
+        },
+        {
+          "doc_title": "Alangium javanicum",
+          "section_idx": 0,
+          "section_title": "Alangium javanicum",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.5849273800849915
+        },
+        {
+          "doc_title": "Cornus foemina",
+          "section_idx": 0,
+          "section_title": "Cornus foemina",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.552359402179718
+        },
+        {
+          "doc_title": "Decumaria",
+          "section_idx": 0,
+          "section_title": "Decumaria",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.5419278740882874
+        },
+        {
+          "doc_title": "Broussaisia",
+          "section_idx": 0,
+          "section_title": "Broussaisia",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.5354673266410828
+        },
+        {
+          "doc_title": "Alangium chinense",
+          "section_idx": 2,
+          "section_title": "Other uses",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.5195732712745667
+        },
+        {
+          "doc_title": "Cornus walteri",
+          "section_idx": 0,
+          "section_title": "Cornus walteri",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.5003111958503723
+        },
+        {
+          "doc_title": "Dichroa febrifuga",
+          "section_idx": 0,
+          "section_title": "Dichroa febrifuga",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.499016672372818
+        },
+        {
+          "doc_title": "Deutzia schneideriana",
+          "section_idx": 0,
+          "section_title": "Deutzia schneideriana",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.4953360855579376
+        },
+        {
+          "doc_title": "Fendlerella",
+          "section_idx": 0,
+          "section_title": "Fendlerella",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.4945520758628845
+        },
+        {
+          "doc_title": "Cornus capitata",
+          "section_idx": 0,
+          "section_title": "Cornus capitata",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.4938473701477051
+        },
+        {
+          "doc_title": "Fendlera",
+          "section_idx": 0,
+          "section_title": "Fendlera",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.4689455032348633
+        },
+        {
+          "doc_title": "Cornus sessilis",
+          "section_idx": 0,
+          "section_title": "Cornus sessilis",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.45956817269325256
+        },
+        {
+          "doc_title": "Alangium chinense",
+          "section_idx": 0,
+          "section_title": "Alangium chinense",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.4578305780887604
+        },
+        {
+          "doc_title": "Deinanthe",
+          "section_idx": 0,
+          "section_title": "Deinanthe",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.4569743275642395
+        },
+        {
+          "doc_title": "Alangiaceae",
+          "section_idx": 0,
+          "section_title": "Alangiaceae",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.4539378583431244
+        },
+        {
+          "doc_title": "Cornaceae",
+          "section_idx": 0,
+          "section_title": "Cornaceae",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.4463837742805481
+        },
+        {
+          "doc_title": "Dichroa",
+          "section_idx": 0,
+          "section_title": "Dichroa",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.4441288411617279
+        },
+        {
+          "doc_title": "Cornus glabrata",
+          "section_idx": 0,
+          "section_title": "Cornus glabrata",
+          "image_score_raw": 0.879382848739624,
+          "reranker_score_raw": 0.41315552592277527
+        }
+      ]
+    }
+  },
+  {
+    "sample_id": 4,
+    "question": "What kind of medical usage has this plant?",
+    "image_path": "/dataset/inaturalist/val/06368_Plantae_Tracheophyta_Liliopsida_Poales_Poaceae_Echinochloa_crus-galli/4898d9b4-0881-48c3-97ba-e81816feab68.jpg",
+    "docs_raw": [
+      {
+        "title": "Echinochloa crus-galli",
+        "raw_score": 0.8483659625053406
+      },
+      {
+        "title": "Panicum niihauense",
+        "raw_score": 0.8474646210670471
+      },
+      {
+        "title": "Paniceae",
+        "raw_score": 0.8460559248924255
+      },
+      {
+        "title": "Echinochloa",
+        "raw_score": 0.8460559248924255
+      },
+      {
+        "title": "Millet",
+        "raw_score": 0.8413752317428589
+      },
+      {
+        "title": "Leopard's Kopje",
+        "raw_score": 0.8413752317428589
+      },
+      {
+        "title": "Eleusine coracana",
+        "raw_score": 0.8413752317428589
+      },
+      {
+        "title": "Ancient grains",
+        "raw_score": 0.8413752317428589
+      },
+      {
+        "title": "Echinochloa colona",
+        "raw_score": 0.8303846120834351
+      },
+      {
+        "title": "Echinochloa frumentacea",
+        "raw_score": 0.8199360370635986
+      },
+      {
+        "title": "Poales",
+        "raw_score": 0.8042787313461304
+      },
+      {
+        "title": "Foxtail millet",
+        "raw_score": 0.8042787313461304
+      },
+      {
+        "title": "Lolium temulentum",
+        "raw_score": 0.7998528480529785
+      },
+      {
+        "title": "Sorghum bicolor",
+        "raw_score": 0.7994792461395264
+      },
+      {
+        "title": "Commercial sorghum",
+        "raw_score": 0.7994792461395264
+      },
+      {
+        "title": "Poaceae",
+        "raw_score": 0.7993130087852478
+      },
+      {
+        "title": "Paspalum urvillei",
+        "raw_score": 0.7985253930091858
+      }
+    ],
+    "sections": {
+      "jina": [
+        {
+          "doc_title": "Commercial sorghum",
+          "section_idx": 5,
+          "section_title": "Culinary use",
+          "image_score_raw": 0.7994792461395264,
+          "reranker_score_raw": 0.6737766861915588
+        },
+        {
+          "doc_title": "Echinochloa crus-galli",
+          "section_idx": 4,
+          "section_title": "Usage",
+          "image_score_raw": 0.8483659625053406,
+          "reranker_score_raw": 0.5982603430747986
+        },
+        {
+          "doc_title": "Lolium temulentum",
+          "section_idx": 0,
+          "section_title": "Lolium temulentum",
+          "image_score_raw": 0.7998528480529785,
+          "reranker_score_raw": 0.5812202095985413
+        },
+        {
+          "doc_title": "Poaceae",
+          "section_idx": 0,
+          "section_title": "Poaceae",
+          "image_score_raw": 0.7993130087852478,
+          "reranker_score_raw": 0.5393996834754944
+        },
+        {
+          "doc_title": "Echinochloa",
+          "section_idx": 0,
+          "section_title": "Echinochloa",
+          "image_score_raw": 0.8460559248924255,
+          "reranker_score_raw": 0.5214951634407043
+        },
+        {
+          "doc_title": "Poaceae",
+          "section_idx": 11,
+          "section_title": "Lawn and ornamental use",
+          "image_score_raw": 0.7993130087852478,
+          "reranker_score_raw": 0.47590920329093933
+        },
+        {
+          "doc_title": "Millet",
+          "section_idx": 14,
+          "section_title": "Grazing millet",
+          "image_score_raw": 0.8413752317428589,
+          "reranker_score_raw": 0.474118173122406
+        },
+        {
+          "doc_title": "Poales",
+          "section_idx": 8,
+          "section_title": "Uses",
+          "image_score_raw": 0.8042787313461304,
+          "reranker_score_raw": 0.4547891616821289
+        },
+        {
+          "doc_title": "Poales",
+          "section_idx": 1,
+          "section_title": "Description",
+          "image_score_raw": 0.8042787313461304,
+          "reranker_score_raw": 0.42470842599868774
+        },
+        {
+          "doc_title": "Lolium temulentum",
+          "section_idx": 1,
+          "section_title": "Growth",
+          "image_score_raw": 0.7998528480529785,
+          "reranker_score_raw": 0.41967493295669556
+        },
+        {
+          "doc_title": "Sorghum bicolor",
+          "section_idx": 7,
+          "section_title": "Other uses",
+          "image_score_raw": 0.7994792461395264,
+          "reranker_score_raw": 0.4195510745048523
+        },
+        {
+          "doc_title": "Eleusine coracana",
+          "section_idx": 8,
+          "section_title": "Insects",
+          "image_score_raw": 0.8413752317428589,
+          "reranker_score_raw": 0.41929173469543457
+        },
+        {
+          "doc_title": "Commercial sorghum",
+          "section_idx": 0,
+          "section_title": "Commercial sorghum",
+          "image_score_raw": 0.7994792461395264,
+          "reranker_score_raw": 0.4083321690559387
+        },
+        {
+          "doc_title": "Echinochloa crus-galli",
+          "section_idx": 1,
+          "section_title": "Description",
+          "image_score_raw": 0.8483659625053406,
+          "reranker_score_raw": 0.4071221649646759
+        },
+        {
+          "doc_title": "Echinochloa crus-galli",
+          "section_idx": 0,
+          "section_title": "Echinochloa crus-galli",
+          "image_score_raw": 0.8483659625053406,
+          "reranker_score_raw": 0.406459242105484
+        },
+        {
+          "doc_title": "Sorghum bicolor",
+          "section_idx": 9,
+          "section_title": "As a weed",
+          "image_score_raw": 0.7994792461395264,
+          "reranker_score_raw": 0.4063071310520172
+        },
+        {
+          "doc_title": "Sorghum bicolor",
+          "section_idx": 1,
+          "section_title": "Cultivation",
+          "image_score_raw": 0.7994792461395264,
+          "reranker_score_raw": 0.4001733362674713
+        },
+        {
+          "doc_title": "Sorghum bicolor",
+          "section_idx": 10,
+          "section_title": "Research",
+          "image_score_raw": 0.7994792461395264,
+          "reranker_score_raw": 0.39539170265197754
+        },
+        {
+          "doc_title": "Echinochloa colona",
+          "section_idx": 2,
+          "section_title": "In culinary use",
+          "image_score_raw": 0.8303846120834351,
+          "reranker_score_raw": 0.3942166268825531
+        },
+        {
+          "doc_title": "Eleusine coracana",
+          "section_idx": 0,
+          "section_title": "Eleusine coracana",
+          "image_score_raw": 0.8413752317428589,
+          "reranker_score_raw": 0.39192280173301697
+        }
+      ]
+    }
+  },
+  {
+    "sample_id": 5,
+    "question": "How long does this animal take care of its children?",
+    "image_path": "/dataset/inaturalist/val/02713_Animalia_Arthropoda_Malacostraca_Decapoda_Gecarcinidae_Cardisoma_guanhumi/04d8a1ff-7cc6-4eba-a579-cdbe2bf4bb04.jpg",
+    "docs_raw": [
+      {
+        "title": "Bahía Portete – Kaurrele National Natural Park",
+        "raw_score": 0.8539716005325317
+      },
+      {
+        "title": "Asymmetry",
+        "raw_score": 0.8360146880149841
+      },
+      {
+        "title": "Johngarthia lagostoma",
+        "raw_score": 0.8293561935424805
+      },
+      {
+        "title": "Similan Islands",
+        "raw_score": 0.826659619808197
+      },
+      {
+        "title": "Cape Lookout National Seashore",
+        "raw_score": 0.824398934841156
+      },
+      {
+        "title": "Cardisoma",
+        "raw_score": 0.8180049657821655
+      },
+      {
+        "title": "Gecarcoidea",
+        "raw_score": 0.8167763948440552
+      },
+      {
+        "title": "Golden ghost crab",
+        "raw_score": 0.8135372400283813
+      },
+      {
+        "title": "Helice tridens",
+        "raw_score": 0.8110653162002563
+      },
+      {
+        "title": "Centuria Insectorum",
+        "raw_score": 0.8090166449546814
+      },
+      {
+        "title": "Cardisoma guanhumi",
+        "raw_score": 0.8071199059486389
+      },
+      {
+        "title": "Signalling theory",
+        "raw_score": 0.8040238618850708
+      },
+      {
+        "title": "Ocypode",
+        "raw_score": 0.7979655265808105
+      },
+      {
+        "title": "Nanhaipotamon",
+        "raw_score": 0.7972851991653442
+      },
+      {
+        "title": "Ocypode ceratophthalmus",
+        "raw_score": 0.7947770357131958
+      },
+      {
+        "title": "False Bay Park",
+        "raw_score": 0.7945016622543335
+      },
+      {
+        "title": "Christmas Island red crab",
+        "raw_score": 0.7930251359939575
+      }
+    ],
+    "sections": {
+      "jina": [
+        {
+          "doc_title": "Christmas Island red crab",
+          "section_idx": 5,
+          "section_title": "Life cycle",
+          "image_score_raw": 0.7930251359939575,
+          "reranker_score_raw": 0.3796035945415497
+        },
+        {
+          "doc_title": "Christmas Island red crab",
+          "section_idx": 4,
+          "section_title": "Migration and breeding",
+          "image_score_raw": 0.7930251359939575,
+          "reranker_score_raw": 0.31800761818885803
+        },
+        {
+          "doc_title": "Christmas Island red crab",
+          "section_idx": 3,
+          "section_title": "Behaviour",
+          "image_score_raw": 0.7930251359939575,
+          "reranker_score_raw": 0.2938671112060547
+        },
+        {
+          "doc_title": "Nanhaipotamon",
+          "section_idx": 0,
+          "section_title": "Nanhaipotamon",
+          "image_score_raw": 0.7972851991653442,
+          "reranker_score_raw": 0.28760361671447754
+        },
+        {
+          "doc_title": "Johngarthia lagostoma",
+          "section_idx": 3,
+          "section_title": "Ecology and conservation",
+          "image_score_raw": 0.8293561935424805,
+          "reranker_score_raw": 0.28449589014053345
+        },
+        {
+          "doc_title": "Cardisoma guanhumi",
+          "section_idx": 5,
+          "section_title": "Life cycle",
+          "image_score_raw": 0.8071199059486389,
+          "reranker_score_raw": 0.272518515586853
+        },
+        {
+          "doc_title": "Johngarthia lagostoma",
+          "section_idx": 4,
+          "section_title": "Life cycle",
+          "image_score_raw": 0.8293561935424805,
+          "reranker_score_raw": 0.27109473943710327
+        },
+        {
+          "doc_title": "Cardisoma guanhumi",
+          "section_idx": 3,
+          "section_title": "Diet",
+          "image_score_raw": 0.8071199059486389,
+          "reranker_score_raw": 0.26276883482933044
+        },
+        {
+          "doc_title": "False Bay Park",
+          "section_idx": 1,
+          "section_title": "Mammals",
+          "image_score_raw": 0.7945016622543335,
+          "reranker_score_raw": 0.25638797879219055
+        },
+        {
+          "doc_title": "Nanhaipotamon",
+          "section_idx": 3,
+          "section_title": "Conservation",
+          "image_score_raw": 0.7972851991653442,
+          "reranker_score_raw": 0.25493746995925903
+        },
+        {
+          "doc_title": "Helice tridens",
+          "section_idx": 0,
+          "section_title": "Helice tridens",
+          "image_score_raw": 0.8110653162002563,
+          "reranker_score_raw": 0.2508074641227722
+        },
+        {
+          "doc_title": "False Bay Park",
+          "section_idx": 2,
+          "section_title": "Birds",
+          "image_score_raw": 0.7945016622543335,
+          "reranker_score_raw": 0.25057241320610046
+        },
+        {
+          "doc_title": "Asymmetry",
+          "section_idx": 3,
+          "section_title": "As an indicator of unfitness",
+          "image_score_raw": 0.8360146880149841,
+          "reranker_score_raw": 0.25016143918037415
+        },
+        {
+          "doc_title": "Golden ghost crab",
+          "section_idx": 1,
+          "section_title": "Classification",
+          "image_score_raw": 0.8135372400283813,
+          "reranker_score_raw": 0.24781733751296997
+        },
+        {
+          "doc_title": "Nanhaipotamon",
+          "section_idx": 2,
+          "section_title": "Distribution and habitat",
+          "image_score_raw": 0.7972851991653442,
+          "reranker_score_raw": 0.24704602360725403
+        },
+        {
+          "doc_title": "Signalling theory",
+          "section_idx": 2,
+          "section_title": "Honest signals",
+          "image_score_raw": 0.8040238618850708,
+          "reranker_score_raw": 0.24581871926784515
+        },
+        {
+          "doc_title": "Signalling theory",
+          "section_idx": 5,
+          "section_title": "Costly signalling and Fisherian diploid dynamics",
+          "image_score_raw": 0.8040238618850708,
+          "reranker_score_raw": 0.24467426538467407
+        },
+        {
+          "doc_title": "Golden ghost crab",
+          "section_idx": 0,
+          "section_title": "Golden ghost crab",
+          "image_score_raw": 0.8135372400283813,
+          "reranker_score_raw": 0.24463647603988647
+        },
+        {
+          "doc_title": "Similan Islands",
+          "section_idx": 4,
+          "section_title": "Important Bird Area",
+          "image_score_raw": 0.826659619808197,
+          "reranker_score_raw": 0.24461255967617035
+        },
+        {
+          "doc_title": "Signalling theory",
+          "section_idx": 8,
+          "section_title": "Costly signalling in hunting",
+          "image_score_raw": 0.8040238618850708,
+          "reranker_score_raw": 0.24401110410690308
+        }
+      ]
+    }
+  },
+  {
+    "sample_id": 6,
+    "question": "In which part of the world does this animal live?",
+    "image_path": "/dataset/inaturalist/val/05206_Animalia_Echinodermata_Asteroidea_Valvatida_Asterinidae_Patiriella_regularis/1f248080-c313-486a-bbf8-1d3a66bd6302.jpg",
+    "docs_raw": [
+      {
+        "title": "Parvulastra exigua",
+        "raw_score": 0.8328602313995361
+      },
+      {
+        "title": "Patiriella regularis",
+        "raw_score": 0.8241676092147827
+      },
+      {
+        "title": "Patiriella",
+        "raw_score": 0.8241676092147827
+      },
+      {
+        "title": "Patiriella calcar",
+        "raw_score": 0.8137879371643066
+      },
+      {
+        "title": "Asterinidae",
+        "raw_score": 0.8137879371643066
+      },
+      {
+        "title": "Patiria chilensis",
+        "raw_score": 0.7950136661529541
+      },
+      {
+        "title": "Patiria",
+        "raw_score": 0.7950136661529541
+      },
+      {
+        "title": "Astrostole scabra",
+        "raw_score": 0.7946343421936035
+      },
+      {
+        "title": "Patterns in nature",
+        "raw_score": 0.7911084294319153
+      },
+      {
+        "title": "Astrostole",
+        "raw_score": 0.7897480130195618
+      },
+      {
+        "title": "Valvatida",
+        "raw_score": 0.7886735200881958
+      },
+      {
+        "title": "Leather star",
+        "raw_score": 0.7886735200881958
+      },
+      {
+        "title": "Asteropseidae",
+        "raw_score": 0.7886735200881958
+      },
+      {
+        "title": "Northern Pacific seastar in Australia",
+        "raw_score": 0.7814953327178955
+      },
+      {
+        "title": "Asteriidae",
+        "raw_score": 0.7814953327178955
+      },
+      {
+        "title": "Asterias amurensis",
+        "raw_score": 0.7814953327178955
+      },
+      {
+        "title": "Asterias",
+        "raw_score": 0.7814953327178955
+      }
+    ],
+    "sections": {
+      "jina": [
+        {
+          "doc_title": "Northern Pacific seastar in Australia",
+          "section_idx": 0,
+          "section_title": "Northern Pacific seastar in Australia",
+          "image_score_raw": 0.7814953327178955,
+          "reranker_score_raw": 0.5641846060752869
+        },
+        {
+          "doc_title": "Asterinidae",
+          "section_idx": 0,
+          "section_title": "Asterinidae",
+          "image_score_raw": 0.8137879371643066,
+          "reranker_score_raw": 0.5563178658485413
+        },
+        {
+          "doc_title": "Asterias amurensis",
+          "section_idx": 14,
+          "section_title": "Prey",
+          "image_score_raw": 0.7814953327178955,
+          "reranker_score_raw": 0.5412241220474243
+        },
+        {
+          "doc_title": "Asterias amurensis",
+          "section_idx": 17,
+          "section_title": "Other",
+          "image_score_raw": 0.7814953327178955,
+          "reranker_score_raw": 0.5375252962112427
+        },
+        {
+          "doc_title": "Patiriella",
+          "section_idx": 1,
+          "section_title": "Description and characteristics",
+          "image_score_raw": 0.8241676092147827,
+          "reranker_score_raw": 0.5362363457679749
+        },
+        {
+          "doc_title": "Asterias amurensis",
+          "section_idx": 15,
+          "section_title": "Predators",
+          "image_score_raw": 0.7814953327178955,
+          "reranker_score_raw": 0.5346943140029907
+        },
+        {
+          "doc_title": "Parvulastra exigua",
+          "section_idx": 2,
+          "section_title": "Distribution",
+          "image_score_raw": 0.8328602313995361,
+          "reranker_score_raw": 0.5332611799240112
+        },
+        {
+          "doc_title": "Parvulastra exigua",
+          "section_idx": 3,
+          "section_title": "Natural history",
+          "image_score_raw": 0.8328602313995361,
+          "reranker_score_raw": 0.530106246471405
+        },
+        {
+          "doc_title": "Astrostole scabra",
+          "section_idx": 0,
+          "section_title": "Astrostole scabra",
+          "image_score_raw": 0.7946343421936035,
+          "reranker_score_raw": 0.5259549021720886
+        },
+        {
+          "doc_title": "Patiria chilensis",
+          "section_idx": 0,
+          "section_title": "Patiria chilensis",
+          "image_score_raw": 0.7950136661529541,
+          "reranker_score_raw": 0.5140694379806519
+        },
+        {
+          "doc_title": "Northern Pacific seastar in Australia",
+          "section_idx": 1,
+          "section_title": "Background",
+          "image_score_raw": 0.7814953327178955,
+          "reranker_score_raw": 0.5110263824462891
+        },
+        {
+          "doc_title": "Patiriella",
+          "section_idx": 0,
+          "section_title": "Patiriella",
+          "image_score_raw": 0.8241676092147827,
+          "reranker_score_raw": 0.4999431371688843
+        },
+        {
+          "doc_title": "Leather star",
+          "section_idx": 0,
+          "section_title": "Leather star",
+          "image_score_raw": 0.7886735200881958,
+          "reranker_score_raw": 0.49522748589515686
+        },
+        {
+          "doc_title": "Asterias amurensis",
+          "section_idx": 16,
+          "section_title": "Parasites",
+          "image_score_raw": 0.7814953327178955,
+          "reranker_score_raw": 0.4939647912979126
+        },
+        {
+          "doc_title": "Patiriella calcar",
+          "section_idx": 0,
+          "section_title": "Patiriella calcar",
+          "image_score_raw": 0.8137879371643066,
+          "reranker_score_raw": 0.4884667694568634
+        },
+        {
+          "doc_title": "Asterias amurensis",
+          "section_idx": 21,
+          "section_title": "Invasive species",
+          "image_score_raw": 0.7814953327178955,
+          "reranker_score_raw": 0.4860827326774597
+        },
+        {
+          "doc_title": "Asterias amurensis",
+          "section_idx": 8,
+          "section_title": "Introduced",
+          "image_score_raw": 0.7814953327178955,
+          "reranker_score_raw": 0.47795557975769043
+        },
+        {
+          "doc_title": "Asteropseidae",
+          "section_idx": 0,
+          "section_title": "Asteropseidae",
+          "image_score_raw": 0.7886735200881958,
+          "reranker_score_raw": 0.47695276141166687
+        },
+        {
+          "doc_title": "Asterias amurensis",
+          "section_idx": 3,
+          "section_title": "Intraspecific variation",
+          "image_score_raw": 0.7814953327178955,
+          "reranker_score_raw": 0.4704155921936035
+        },
+        {
+          "doc_title": "Patiria",
+          "section_idx": 0,
+          "section_title": "Patiria",
+          "image_score_raw": 0.7950136661529541,
+          "reranker_score_raw": 0.4630138576030731
+        }
+      ]
+    }
+  },
+  {
+    "sample_id": 7,
+    "question": "How long does this animal take care of its children?",
+    "image_path": "/dataset/inaturalist/val/05206_Animalia_Echinodermata_Asteroidea_Valvatida_Asterinidae_Patiriella_regularis/d0d9802e-9fd8-4a4e-a463-9fcd7743d288.jpg",
+    "docs_raw": [
+      {
+        "title": "Parvulastra exigua",
+        "raw_score": 0.872403621673584
+      },
+      {
+        "title": "Sand dollar",
+        "raw_score": 0.8403929471969604
+      },
+      {
+        "title": "Mellita quinquiesperforata",
+        "raw_score": 0.8403929471969604
+      },
+      {
+        "title": "Goniasteridae",
+        "raw_score": 0.838731050491333
+      },
+      {
+        "title": "Patiria chilensis",
+        "raw_score": 0.8169125318527222
+      },
+      {
+        "title": "Patiria",
+        "raw_score": 0.8169125318527222
+      },
+      {
+        "title": "Sea urchin",
+        "raw_score": 0.8128397464752197
+      },
+      {
+        "title": "Clypeaster rosaceus",
+        "raw_score": 0.8128397464752197
+      },
+      {
+        "title": "Loveniidae",
+        "raw_score": 0.8123761415481567
+      },
+      {
+        "title": "Echinocardium cordatum",
+        "raw_score": 0.8123761415481567
+      },
+      {
+        "title": "Meyenaster",
+        "raw_score": 0.8106290698051453
+      },
+      {
+        "title": "Coscinasterias",
+        "raw_score": 0.8102660179138184
+      },
+      {
+        "title": "Valvatida",
+        "raw_score": 0.8098145723342896
+      },
+      {
+        "title": "Mellitidae",
+        "raw_score": 0.805296003818512
+      },
+      {
+        "title": "Keyhole sand dollar",
+        "raw_score": 0.805296003818512
+      },
+      {
+        "title": "Astrostole scabra",
+        "raw_score": 0.8028712868690491
+      },
+      {
+        "title": "Patiriella regularis",
+        "raw_score": 0.8016406297683716
+      },
+      {
+        "title": "Patiriella",
+        "raw_score": 0.8016406297683716
+      }
+    ],
+    "sections": {
+      "jina": [
+        {
+          "doc_title": "Sea urchin",
+          "section_idx": 11,
+          "section_title": "Life cycle and development",
+          "image_score_raw": 0.8128397464752197,
+          "reranker_score_raw": 0.4758574962615967
+        },
+        {
+          "doc_title": "Clypeaster rosaceus",
+          "section_idx": 2,
+          "section_title": "Distribution and habitat",
+          "image_score_raw": 0.8128397464752197,
+          "reranker_score_raw": 0.3404827415943146
+        },
+        {
+          "doc_title": "Mellitidae",
+          "section_idx": 0,
+          "section_title": "Mellitidae",
+          "image_score_raw": 0.805296003818512,
+          "reranker_score_raw": 0.29603028297424316
+        },
+        {
+          "doc_title": "Loveniidae",
+          "section_idx": 0,
+          "section_title": "Loveniidae",
+          "image_score_raw": 0.8123761415481567,
+          "reranker_score_raw": 0.28379908204078674
+        },
+        {
+          "doc_title": "Sand dollar",
+          "section_idx": 4,
+          "section_title": "Behavior and habitat",
+          "image_score_raw": 0.8403929471969604,
+          "reranker_score_raw": 0.2806400656700134
+        },
+        {
+          "doc_title": "Astrostole scabra",
+          "section_idx": 0,
+          "section_title": "Astrostole scabra",
+          "image_score_raw": 0.8028712868690491,
+          "reranker_score_raw": 0.2783696949481964
+        },
+        {
+          "doc_title": "Patiria chilensis",
+          "section_idx": 0,
+          "section_title": "Patiria chilensis",
+          "image_score_raw": 0.8169125318527222,
+          "reranker_score_raw": 0.2780360281467438
+        },
+        {
+          "doc_title": "Echinocardium cordatum",
+          "section_idx": 3,
+          "section_title": "Biology",
+          "image_score_raw": 0.8123761415481567,
+          "reranker_score_raw": 0.2760060131549835
+        },
+        {
+          "doc_title": "Patiriella regularis",
+          "section_idx": 0,
+          "section_title": "Patiriella regularis",
+          "image_score_raw": 0.8016406297683716,
+          "reranker_score_raw": 0.2750787138938904
+        },
+        {
+          "doc_title": "Valvatida",
+          "section_idx": 1,
+          "section_title": "Description",
+          "image_score_raw": 0.8098145723342896,
+          "reranker_score_raw": 0.26472190022468567
+        },
+        {
+          "doc_title": "Meyenaster",
+          "section_idx": 0,
+          "section_title": "Meyenaster",
+          "image_score_raw": 0.8106290698051453,
+          "reranker_score_raw": 0.26431673765182495
+        },
+        {
+          "doc_title": "Loveniidae",
+          "section_idx": 1,
+          "section_title": "Description and characteristics",
+          "image_score_raw": 0.8123761415481567,
+          "reranker_score_raw": 0.2623370289802551
+        },
+        {
+          "doc_title": "Echinocardium cordatum",
+          "section_idx": 1,
+          "section_title": "Description",
+          "image_score_raw": 0.8123761415481567,
+          "reranker_score_raw": 0.2606648802757263
+        },
+        {
+          "doc_title": "Goniasteridae",
+          "section_idx": 2,
+          "section_title": "Location and habitat",
+          "image_score_raw": 0.838731050491333,
+          "reranker_score_raw": 0.25689253211021423
+        },
+        {
+          "doc_title": "Sea urchin",
+          "section_idx": 14,
+          "section_title": "Predators, parasites, and diseases",
+          "image_score_raw": 0.8128397464752197,
+          "reranker_score_raw": 0.25610193610191345
+        },
+        {
+          "doc_title": "Meyenaster",
+          "section_idx": 1,
+          "section_title": "Description",
+          "image_score_raw": 0.8106290698051453,
+          "reranker_score_raw": 0.2546681761741638
+        },
+        {
+          "doc_title": "Meyenaster",
+          "section_idx": 3,
+          "section_title": "Ecology",
+          "image_score_raw": 0.8106290698051453,
+          "reranker_score_raw": 0.2523440420627594
+        },
+        {
+          "doc_title": "Patiriella",
+          "section_idx": 0,
+          "section_title": "Patiriella",
+          "image_score_raw": 0.8016406297683716,
+          "reranker_score_raw": 0.25218507647514343
+        },
+        {
+          "doc_title": "Sea urchin",
+          "section_idx": 0,
+          "section_title": "Sea urchin",
+          "image_score_raw": 0.8128397464752197,
+          "reranker_score_raw": 0.24889034032821655
+        },
+        {
+          "doc_title": "Parvulastra exigua",
+          "section_idx": 3,
+          "section_title": "Natural history",
+          "image_score_raw": 0.872403621673584,
+          "reranker_score_raw": 0.2474949061870575
+        }
+      ]
+    }
+  },
+  {
+    "sample_id": 8,
+    "question": "What is the common name for this animal?",
+    "image_path": "/dataset/inaturalist/val/05204_Animalia_Echinodermata_Asteroidea_Spinulosida_Echinasteridae_Henricia_leviuscula/7308287b-f14c-4a41-9c3e-35aecf4bd0fe.jpg",
+    "docs_raw": [
+      {
+        "title": "Henricia leviuscula",
+        "raw_score": 0.8560782670974731
+      },
+      {
+        "title": "Henricia",
+        "raw_score": 0.8560782670974731
+      },
+      {
+        "title": "Coscinasterias",
+        "raw_score": 0.8545020818710327
+      },
+      {
+        "title": "Starfish",
+        "raw_score": 0.818655252456665
+      },
+      {
+        "title": "Animal",
+        "raw_score": 0.818655252456665
+      },
+      {
+        "title": "Valvatida",
+        "raw_score": 0.8165948987007141
+      },
+      {
+        "title": "Certonardoa semiregularis",
+        "raw_score": 0.8118704557418823
+      },
+      {
+        "title": "Asterias",
+        "raw_score": 0.808440625667572
+      },
+      {
+        "title": "Fromia milleporella",
+        "raw_score": 0.8068302869796753
+      },
+      {
+        "title": "Fromia",
+        "raw_score": 0.8068302869796753
+      },
+      {
+        "title": "Ophidiasteridae",
+        "raw_score": 0.8052979111671448
+      },
+      {
+        "title": "Patiria chilensis",
+        "raw_score": 0.8050279021263123
+      },
+      {
+        "title": "Patiria",
+        "raw_score": 0.8050279021263123
+      },
+      {
+        "title": "Leather star",
+        "raw_score": 0.8040956258773804
+      },
+      {
+        "title": "Asteropseidae",
+        "raw_score": 0.8040956258773804
+      }
+    ],
+    "sections": {
+      "jina": [
+        {
+          "doc_title": "Starfish",
+          "section_idx": 0,
+          "section_title": "Starfish",
+          "image_score_raw": 0.818655252456665,
+          "reranker_score_raw": 0.7841241955757141
+        },
+        {
+          "doc_title": "Fromia milleporella",
+          "section_idx": 0,
+          "section_title": "Fromia milleporella",
+          "image_score_raw": 0.8068302869796753,
+          "reranker_score_raw": 0.7668489217758179
+        },
+        {
+          "doc_title": "Henricia",
+          "section_idx": 0,
+          "section_title": "Henricia",
+          "image_score_raw": 0.8560782670974731,
+          "reranker_score_raw": 0.7489933371543884
+        },
+        {
+          "doc_title": "Animal",
+          "section_idx": 0,
+          "section_title": "Animal",
+          "image_score_raw": 0.818655252456665,
+          "reranker_score_raw": 0.71511310338974
+        },
+        {
+          "doc_title": "Asteropseidae",
+          "section_idx": 0,
+          "section_title": "Asteropseidae",
+          "image_score_raw": 0.8040956258773804,
+          "reranker_score_raw": 0.7143647074699402
+        },
+        {
+          "doc_title": "Fromia",
+          "section_idx": 0,
+          "section_title": "Fromia",
+          "image_score_raw": 0.8068302869796753,
+          "reranker_score_raw": 0.7093172073364258
+        },
+        {
+          "doc_title": "Animal",
+          "section_idx": 10,
+          "section_title": "Phylogeny",
+          "image_score_raw": 0.818655252456665,
+          "reranker_score_raw": 0.7072682976722717
+        },
+        {
+          "doc_title": "Animal",
+          "section_idx": 7,
+          "section_title": "Size",
+          "image_score_raw": 0.818655252456665,
+          "reranker_score_raw": 0.6995481252670288
+        },
+        {
+          "doc_title": "Patiria chilensis",
+          "section_idx": 0,
+          "section_title": "Patiria chilensis",
+          "image_score_raw": 0.8050279021263123,
+          "reranker_score_raw": 0.6898351311683655
+        },
+        {
+          "doc_title": "Coscinasterias",
+          "section_idx": 0,
+          "section_title": "Coscinasterias",
+          "image_score_raw": 0.8545020818710327,
+          "reranker_score_raw": 0.6863724589347839
+        },
+        {
+          "doc_title": "Patiria",
+          "section_idx": 0,
+          "section_title": "Patiria",
+          "image_score_raw": 0.8050279021263123,
+          "reranker_score_raw": 0.6748389601707458
+        },
+        {
+          "doc_title": "Henricia leviuscula",
+          "section_idx": 6,
+          "section_title": "Associations",
+          "image_score_raw": 0.8560782670974731,
+          "reranker_score_raw": 0.6649107933044434
+        },
+        {
+          "doc_title": "Animal",
+          "section_idx": 14,
+          "section_title": "Ecdysozoa",
+          "image_score_raw": 0.818655252456665,
+          "reranker_score_raw": 0.6605095267295837
+        },
+        {
+          "doc_title": "Certonardoa semiregularis",
+          "section_idx": 0,
+          "section_title": "Certonardoa semiregularis",
+          "image_score_raw": 0.8118704557418823,
+          "reranker_score_raw": 0.657793402671814
+        },
+        {
+          "doc_title": "Starfish",
+          "section_idx": 25,
+          "section_title": "External",
+          "image_score_raw": 0.818655252456665,
+          "reranker_score_raw": 0.648513913154602
+        },
+        {
+          "doc_title": "Animal",
+          "section_idx": 1,
+          "section_title": "Etymology",
+          "image_score_raw": 0.818655252456665,
+          "reranker_score_raw": 0.6314796209335327
+        },
+        {
+          "doc_title": "Animal",
+          "section_idx": 18,
+          "section_title": "Practical uses",
+          "image_score_raw": 0.818655252456665,
+          "reranker_score_raw": 0.6275610327720642
+        },
+        {
+          "doc_title": "Asteropseidae",
+          "section_idx": 1,
+          "section_title": "Genera",
+          "image_score_raw": 0.8040956258773804,
+          "reranker_score_raw": 0.6244155168533325
+        },
+        {
+          "doc_title": "Starfish",
+          "section_idx": 18,
+          "section_title": "Threats",
+          "image_score_raw": 0.818655252456665,
+          "reranker_score_raw": 0.6214092969894409
+        },
+        {
+          "doc_title": "Valvatida",
+          "section_idx": 0,
+          "section_title": "Valvatida",
+          "image_score_raw": 0.8165948987007141,
+          "reranker_score_raw": 0.602312445640564
+        }
+      ]
+    }
+  },
+  {
+    "sample_id": 9,
+    "question": "In which part of the world does this animal live?",
+    "image_path": "/dataset/inaturalist/val/05204_Animalia_Echinodermata_Asteroidea_Spinulosida_Echinasteridae_Henricia_leviuscula/0995a137-ee5b-411f-9c8b-43eaa3a51178.jpg",
+    "docs_raw": [
+      {
+        "title": "Austrofromia polypora",
+        "raw_score": 0.8953583836555481
+      },
+      {
+        "title": "Austrofromia",
+        "raw_score": 0.8953583836555481
+      },
+      {
+        "title": "Fromia schultzei",
+        "raw_score": 0.8949797749519348
+      },
+      {
+        "title": "Fromia",
+        "raw_score": 0.8949797749519348
+      },
+      {
+        "title": "Henricia",
+        "raw_score": 0.891775906085968
+      },
+      {
+        "title": "Asterinidae",
+        "raw_score": 0.888902485370636
+      },
+      {
+        "title": "Echinaster spinulosus",
+        "raw_score": 0.8847938776016235
+      },
+      {
+        "title": "Echinasteridae",
+        "raw_score": 0.8836256265640259
+      },
+      {
+        "title": "Plectaster decanus",
+        "raw_score": 0.8817965984344482
+      },
+      {
+        "title": "Asteriidae",
+        "raw_score": 0.880937933921814
+      },
+      {
+        "title": "Asteropseidae",
+        "raw_score": 0.878472089767456
+      },
+      {
+        "title": "Goniasteridae",
+        "raw_score": 0.8780546188354492
+      },
+      {
+        "title": "Petricia vernicina",
+        "raw_score": 0.8731391429901123
+      },
+      {
+        "title": "Fromia milleporella",
+        "raw_score": 0.8719165325164795
+      }
+    ],
+    "sections": {
+      "jina": [
+        {
+          "doc_title": "Fromia milleporella",
+          "section_idx": 2,
+          "section_title": "Distribution",
+          "image_score_raw": 0.8719165325164795,
+          "reranker_score_raw": 0.6171536445617676
+        },
+        {
+          "doc_title": "Echinaster spinulosus",
+          "section_idx": 2,
+          "section_title": "Distribution and habitat",
+          "image_score_raw": 0.8847938776016235,
+          "reranker_score_raw": 0.5686929821968079
+        },
+        {
+          "doc_title": "Asterinidae",
+          "section_idx": 0,
+          "section_title": "Asterinidae",
+          "image_score_raw": 0.888902485370636,
+          "reranker_score_raw": 0.5563178658485413
+        },
+        {
+          "doc_title": "Petricia vernicina",
+          "section_idx": 0,
+          "section_title": "Petricia vernicina",
+          "image_score_raw": 0.8731391429901123,
+          "reranker_score_raw": 0.552073061466217
+        },
+        {
+          "doc_title": "Henricia",
+          "section_idx": 0,
+          "section_title": "Henricia",
+          "image_score_raw": 0.891775906085968,
+          "reranker_score_raw": 0.5500882863998413
+        },
+        {
+          "doc_title": "Echinasteridae",
+          "section_idx": 3,
+          "section_title": "Ecology",
+          "image_score_raw": 0.8836256265640259,
+          "reranker_score_raw": 0.5380128622055054
+        },
+        {
+          "doc_title": "Plectaster decanus",
+          "section_idx": 0,
+          "section_title": "Plectaster decanus",
+          "image_score_raw": 0.8817965984344482,
+          "reranker_score_raw": 0.5311987400054932
+        },
+        {
+          "doc_title": "Echinasteridae",
+          "section_idx": 1,
+          "section_title": "Taxonomy",
+          "image_score_raw": 0.8836256265640259,
+          "reranker_score_raw": 0.5305200219154358
+        },
+        {
+          "doc_title": "Fromia schultzei",
+          "section_idx": 0,
+          "section_title": "Fromia schultzei",
+          "image_score_raw": 0.8949797749519348,
+          "reranker_score_raw": 0.5087547898292542
+        },
+        {
+          "doc_title": "Goniasteridae",
+          "section_idx": 2,
+          "section_title": "Location and habitat",
+          "image_score_raw": 0.8780546188354492,
+          "reranker_score_raw": 0.5032914280891418
+        },
+        {
+          "doc_title": "Austrofromia",
+          "section_idx": 0,
+          "section_title": "Austrofromia",
+          "image_score_raw": 0.8953583836555481,
+          "reranker_score_raw": 0.4839756190776825
+        },
+        {
+          "doc_title": "Asteropseidae",
+          "section_idx": 0,
+          "section_title": "Asteropseidae",
+          "image_score_raw": 0.878472089767456,
+          "reranker_score_raw": 0.47695276141166687
+        },
+        {
+          "doc_title": "Fromia",
+          "section_idx": 0,
+          "section_title": "Fromia",
+          "image_score_raw": 0.8949797749519348,
+          "reranker_score_raw": 0.47480952739715576
+        },
+        {
+          "doc_title": "Fromia",
+          "section_idx": 1,
+          "section_title": "Description",
+          "image_score_raw": 0.8949797749519348,
+          "reranker_score_raw": 0.46684500575065613
+        },
+        {
+          "doc_title": "Goniasteridae",
+          "section_idx": 0,
+          "section_title": "Goniasteridae",
+          "image_score_raw": 0.8780546188354492,
+          "reranker_score_raw": 0.4632335901260376
+        },
+        {
+          "doc_title": "Austrofromia polypora",
+          "section_idx": 0,
+          "section_title": "Austrofromia polypora",
+          "image_score_raw": 0.8953583836555481,
+          "reranker_score_raw": 0.4611924886703491
+        },
+        {
+          "doc_title": "Asteriidae",
+          "section_idx": 0,
+          "section_title": "Asteriidae",
+          "image_score_raw": 0.880937933921814,
+          "reranker_score_raw": 0.4274572730064392
+        },
+        {
+          "doc_title": "Asteropseidae",
+          "section_idx": 1,
+          "section_title": "Genera",
+          "image_score_raw": 0.878472089767456,
+          "reranker_score_raw": 0.4246380031108856
+        },
+        {
+          "doc_title": "Echinasteridae",
+          "section_idx": 0,
+          "section_title": "Echinasteridae",
+          "image_score_raw": 0.8836256265640259,
+          "reranker_score_raw": 0.41450488567352295
+        },
+        {
+          "doc_title": "Fromia milleporella",
+          "section_idx": 0,
+          "section_title": "Fromia milleporella",
+          "image_score_raw": 0.8719165325164795,
+          "reranker_score_raw": 0.397909551858902
+        }
+      ]
+    }
+  }
+]

@@ -40,11 +40,10 @@ mpnet_model: sentence-transformers/all-mpnet-base-v2 #bi-encoder
 # -------------------------------
 # Reranker/Image Fusion (section ranking)
 # -------------------------------
-# Combined per-section score = rank_img_weight * softmax(img_score) + rank_rerank_weight * sigmoid(rerank_score/temperature)
-rank_img_weight: 0.7
-rank_rerank_weight: 0.3
-rank_text_temp: 2.0   # sigmoid temperature for text reranker scores
-# rank_img_softmax_temp: 1.0  # optional softmax temperature for image doc scores
+# Combined per-section score = rank_img_ratio * img_score_raw + (1 - rank_img_ratio) * reranker_score_raw
+rank_img_ratio: 0.5
+# When Q-Former reranker is active, combined = qformer_img_ratio * img_score_raw + (1 - qformer_img_ratio) * qformer_score_raw
+qformer_img_ratio: 0.5
 
 deberta_nli_model: tasksource/deberta-base-long-nli
 roberta_nli_model: FacebookAI/roberta-large-mnli
@@ -75,12 +74,12 @@ nli_models:
 # Reranker settings
 rerankers:
   contriever: false
-  jina_tiny: false
+  jina_tiny: true
   jina_turbo: false
   bge: false
   electra: false
   mpnet: false
-  q-former: ture
+  q-former: false
 
 #양방향 실험용
   nli_edge_rule: avg #both_dir or avg

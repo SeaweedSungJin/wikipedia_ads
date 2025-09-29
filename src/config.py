@@ -30,23 +30,17 @@ class Config:
     electra_batch_size: int = 32
     mpnet_model: str = "sentence-transformers/all-mpnet-base-v2"  # Bi-encoder model
     bge_conf_threshold: float = 0.5  # Confidence threshold for reranker scores
-    # Fusion weights for section ranking (min-max scaled):
-    # combined = rank_img_weight * img_score_norm + rank_rerank_weight * rerank_score_norm
-    rank_img_weight: float = 0.3
-    rank_rerank_weight: float = 0.7
-    # Normalization temperatures
-    # Image doc score: softmax over retrieved docs with this temperature
-    rank_img_softmax_temp: float = 1.0
-    # Text reranker score: sigmoid(score / temp)
-    rank_text_temp: float = 2.0
+    # Fusion ratio for section ranking using raw scores:
+    # combined = rank_img_ratio * img_score_raw + (1 - rank_img_ratio) * rerank_score_raw
+    rank_img_ratio: float = 0.5
     # Q-Former integration
     qformer_ckpt: str = "datasets/reranker.pth"
     qformer_device: int | str = 0
     qformer_section_batch_size: int = 32
     qformer_text_token_count: int = 32
     qformer_max_text_length: int = 256
-    qformer_doc_weight: float = 0.5
-    qformer_text_weight: float = 0.5
+    # Fusion ratio for Q-Former reranking (raw scores)
+    qformer_img_ratio: float = 0.5
     # NLI model names
     deberta_nli_model: str = "tasksource/deberta-base-long-nli"
     roberta_nli_model: str = "FacebookAI/roberta-large-mnli"
@@ -125,6 +119,38 @@ class Config:
             data["rerankers"] = {}
         if "nli_models" not in data:
             data["nli_models"] = {}
+
+        # Convert legacy fusion weights to ratio if present
+        if "rank_img_ratio" not in data:
+            img_w = data.pop("rank_img_weight", None)
+            rer_w = data.pop("rank_rerank_weight", None)
+            text_temp = data.pop("rank_text_temp", None)
+            data.pop("rank_img_softmax_temp", None)
+            if img_w is not None or rer_w is not None:
+                try:
+                    img_w = float(0.0 if img_w is None else img_w)
+                    rer_w = float(0.0 if rer_w is None else rer_w)
+                    total = img_w + rer_w
+                    if total > 0:
+                        data["rank_img_ratio"] = img_w / total
+                except (TypeError, ValueError):
+                    pass
+            elif text_temp is not None:
+                # No legacy weights provided; nothing to convert, but key removed above
+                pass
+
+        if "qformer_img_ratio" not in data:
+            doc_w = data.pop("qformer_doc_weight", None)
+            txt_w = data.pop("qformer_text_weight", None)
+            if doc_w is not None or txt_w is not None:
+                try:
+                    doc_w = float(0.0 if doc_w is None else doc_w)
+                    txt_w = float(0.0 if txt_w is None else txt_w)
+                    total = doc_w + txt_w
+                    if total > 0:
+                        data["qformer_img_ratio"] = doc_w / total
+                except (TypeError, ValueError):
+                    pass
 
         # Ignore any unexpected keys instead of raising a TypeError
         valid_fields = set(cls.__dataclass_fields__)
