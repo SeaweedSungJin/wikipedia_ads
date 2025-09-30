@@ -183,17 +183,24 @@ def main() -> None:
                 pass
         prev_image_path = cfg.image_path
         cfg.text_query = sample.question
+        if hasattr(cfg, "cache_sample_key"):
+            cfg.cache_sample_key = str(sample.row_idx)
         warmup = sample_total < args.warmup_steps
         sid = sample.row_idx
 
         try:
-            img_results, top_sections, _, _ = search_rag_pipeline(
+            result = search_rag_pipeline(
                 cfg,
                 stage_meter_factory=stage_factory(sid, warmup),
             )
+            if result is None:
+                raise RuntimeError("search_rag_pipeline returned None")
+            img_results, top_sections, _, _ = result
         except Exception as e:
             print(f"[Row {sid}] 파이프라인 실패: {e}")
+            cfg.cache_sample_key = None
             continue
+        cfg.cache_sample_key = None
         # Log candidate docs scores
         for rank, res in enumerate(img_results, 1):
             doc_title = res.get("doc", {}).get("title", "")

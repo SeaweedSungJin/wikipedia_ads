@@ -39,6 +39,7 @@ from .segmenter import (
     SentenceSegmenter,
     ParagraphSegmenter,
 )
+from . import clip_cache
 # Cached resources
 _FAISS_INDEX = None
 _KB_IDS = None
@@ -126,6 +127,23 @@ def search_rag_pipeline(
     faiss_index, kb_ids = _FAISS_INDEX, _KB_IDS
     kb_list = _KB_LIST
 
+    clip_cache_handle = None
+    clip_cache_target = max(cfg.k_value, int(getattr(cfg, "clip_cache_kmax", cfg.k_value)))
+    cache_dir = getattr(cfg, "clip_cache_dir", None)
+    if cache_dir:
+        encoder_name = getattr(getattr(image_model, "config", None), "_name_or_path", "image_encoder")
+        cache_meta = clip_cache.build_meta(
+            dataset_csv=cfg.dataset_csv,
+            dataset_start=cfg.dataset_start,
+            dataset_end=cfg.dataset_end,
+            kb_json_path=cfg.kb_json_path,
+            kb_doc_count=len(kb_list),
+            image_encoder=encoder_name,
+            base_path=cfg.base_path,
+            clip_k_max=clip_cache_target,
+        )
+        clip_cache_handle = clip_cache.open_cache(cache_dir, cache_meta)
+
     start_time = time.time()
 
     # Build a lookup table so we can convert a FAISS index position back
@@ -134,6 +152,39 @@ def search_rag_pipeline(
     for i, doc_idx in enumerate(kb_ids):
         if doc_idx not in doc_idx_starts:
             doc_idx_starts[doc_idx] = i
+
+    def _collect_from_faiss(distances, indices, limit: int) -> Tuple[List[int], List[float], List[int], List[int]]:
+        doc_indices: List[int] = []
+        doc_scores: List[float] = []
+        doc_offsets: List[int] = []
+        faiss_positions: List[int] = []
+        seen: Dict[int, int] = {}
+        cols = indices.shape[1]
+        for pos in range(cols):
+            if len(doc_indices) >= limit:
+                break
+            faiss_vidx = int(indices[0, pos])
+            doc_idx = int(kb_ids[faiss_vidx])
+            if not (0 <= doc_idx < len(kb_list)):
+                continue
+            title_norm = normalize_title(kb_list[doc_idx].get("title", ""))
+            if any(phrase in title_norm for phrase in ("list of", "outline of", "index of")):
+                continue
+            offset = _get_image_offset(faiss_vidx, doc_idx, doc_idx_starts)
+            score = float(distances[0, pos])
+            existing = seen.get(doc_idx)
+            if existing is None:
+                seen[doc_idx] = len(doc_indices)
+                doc_indices.append(doc_idx)
+                doc_scores.append(score)
+                doc_offsets.append(offset)
+                faiss_positions.append(int(pos))
+            else:
+                if score > doc_scores[existing]:
+                    doc_scores[existing] = score
+                    doc_offsets[existing] = offset
+                    faiss_positions[existing] = int(pos)
+        return doc_indices, doc_scores, doc_offsets, faiss_positions
 
     # Encode the query image and search the FAISS index
     if stage_meter_factory:
@@ -154,47 +205,72 @@ def search_rag_pipeline(
         search_k = min(expand, faiss_index.ntotal)
         distances, indices = faiss_index.search(img_emb_np, k=search_k)
 
-    # Collect top-K image search results using the evaluate_pipeline logic
+    doc_indices: List[int] = []
+    doc_scores_list: List[float] = []
+    doc_offsets: List[int] = []
+    faiss_positions: List[int] = []
+    row_key = None
+    key_candidate = getattr(cfg, "cache_sample_key", None)
+    if key_candidate is None:
+        key_candidate = cfg.image_path
+    if key_candidate is not None:
+        row_key = str(key_candidate)
+
+    if clip_cache_handle is not None and row_key is not None:
+        cached = clip_cache.get_row(clip_cache_handle, row_key, cfg.k_value)
+        if cached and len(cached["doc_indices"]) >= cfg.k_value:
+            doc_indices = cached["doc_indices"][:clip_cache_target]
+            doc_scores_list = cached["doc_scores"][:clip_cache_target]
+            doc_offsets = cached["image_offsets"][:clip_cache_target]
+            faiss_positions = cached["faiss_positions"][:clip_cache_target]
+
+    if not doc_indices:
+        doc_indices, doc_scores_list, doc_offsets, faiss_positions = _collect_from_faiss(
+            distances, indices, clip_cache_target
+        )
+        if clip_cache_handle is not None and row_key is not None and doc_indices:
+            clip_cache.put_row(
+                clip_cache_handle,
+                row_key,
+                doc_indices,
+                doc_scores_list,
+                doc_offsets,
+                faiss_positions,
+            )
+
+    if clip_cache_handle is not None:
+        clip_cache.save_cache(clip_cache_handle)
+
+    if not doc_indices:
+        elapsed = time.time() - start_time
+        return [], [], [], elapsed
+
+    # Take only the configured top-K for downstream usage
+    limit = cfg.k_value
+    doc_indices_use = doc_indices[:limit]
+    doc_scores_use = doc_scores_list[:limit]
+    doc_offsets_use = doc_offsets[:limit]
+
+    # Collect top-K image search results using cached or fresh FAISS candidates
     top_k_image_results: List[dict] = []
-    unique_doc_indices = set()
-
-    limit = indices.shape[1]
-    for i in range(limit):
-        if len(unique_doc_indices) >= cfg.k_value:
-            break
-        faiss_vidx = int(indices[0][i])
-        doc_idx = int(kb_ids[faiss_vidx])
-
-        if doc_idx in unique_doc_indices:
-            continue
-
+    for doc_idx, score, offset in zip(doc_indices_use, doc_scores_use, doc_offsets_use):
         if not (0 <= doc_idx < len(kb_list)):
             continue
-
         doc = kb_list[doc_idx]
-        title_norm = normalize_title(doc.get("title", ""))
-        if any(
-            phrase in title_norm for phrase in ["list of", "outline of", "index of"]
-        ):
-            continue
-
-        offset = _get_image_offset(faiss_vidx, doc_idx, doc_idx_starts)
         img_urls = doc.get("image_urls", [])
         img_url = img_urls[offset] if 0 <= offset < len(img_urls) else None
         descriptions = doc.get("image_reference_descriptions", [])
-        description = (
-            descriptions[offset] if 0 <= offset < len(descriptions) else ""
-        )
-
+        description = descriptions[offset] if 0 <= offset < len(descriptions) else ""
         top_k_image_results.append(
             {
                 "doc": doc,
-                "similarity": float(distances[0][i]),
+                "similarity": float(score),
                 "description": description,
                 "image_url": img_url,
             }
         )
-        unique_doc_indices.add(doc_idx)
+
+    unique_doc_indices = doc_indices_use
 
     fused_embeddings = []
     filtered_sections: List[dict] = []  # ensure defined for all code paths

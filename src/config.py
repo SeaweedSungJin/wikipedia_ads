@@ -18,6 +18,8 @@ class Config:
     m_value: int  # Number of text sections to return
     alpha: float  # Weight for image/text fusion
     search_expand: int | None = None  # Oversampled FAISS results before filtering
+    clip_cache_dir: str | None = None
+    clip_cache_kmax: int = 50
 
     # Model options
     text_encoder_model: str = "facebook/contriever"  # HuggingFace model name

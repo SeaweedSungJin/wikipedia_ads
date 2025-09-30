@@ -68,13 +68,20 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
             continue
         cfg.image_path = sample.image_paths[0]
         cfg.text_query = sample.question
+        if hasattr(cfg, "cache_sample_key"):
+            cfg.cache_sample_key = str(sample.row_idx)
 
         try:
-            img_results, top_sections, _, rerank_elapsed = search_rag_pipeline(cfg)
+            result = search_rag_pipeline(cfg)
+            if result is None:
+                raise RuntimeError("search_rag_pipeline returned None")
+            img_results, top_sections, _, rerank_elapsed = result
         except Exception as e:
             print(f"[Row {sample.row_idx}] 이미지 검색 실패: {e}")
+            cfg.cache_sample_key = None
             continue
         total_rerank_elapsed += rerank_elapsed
+        cfg.cache_sample_key = None
 
         ground_truth = build_ground_truth(sample)
         if ground_truth is None:
