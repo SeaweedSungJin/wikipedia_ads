@@ -15,7 +15,7 @@ import torch
 from src.config import Config
 from src.dataloader import VQADataset
 from src.pipeline import search_rag_pipeline
-from src.nli_cluster import cluster_sections_clique, cluster_sections_consistency
+from src.nli_cluster import cluster_sections_consistency
 from src.models import load_vlm_model, generate_vlm_answer, load_nli_model, resolve_device
 from src.eval import evaluate_example
 from src.evaluation_utils import (
@@ -79,7 +79,7 @@ def main() -> None:
     summary_json = os.path.join(out_dir, "metrics_summary.json")
     docs_csv = os.path.join(out_dir, "candidate_docs.csv")
     secs_csv = os.path.join(out_dir, "candidate_sections.csv")
-    clus_csv = os.path.join(out_dir, "candidate_clusters.csv")
+    nli_csv = os.path.join(out_dir, "candidate_nli.csv")
 
     # Devices
     device_img = resolve_device(cfg.image_device)
@@ -156,20 +156,19 @@ def main() -> None:
         "img_score_norm",
         "combined_score",
     ])
-    # NLI clusters (consistency/clique) per sample
-    f_clus = open(clus_csv, "w", newline="", encoding="utf-8")
-    w_clus = csv.writer(f_clus)
-    w_clus.writerow([
+    # Final NLI selections per sample
+    f_nli = open(nli_csv, "w", newline="", encoding="utf-8")
+    w_nli = csv.writer(f_nli)
+    w_nli.writerow([
         "sample_id",
         "cluster_rank",
-        "selection_mode",
-        "cluster_score",  # hybrid score used for ranking
-        "consistency_norm",
-        "section_norm_avg",
         "cluster_size",
-        "member_indices",
-        "member_doc_titles",
-        "member_section_ids",
+        "doc_title",
+        "section_id",
+        "section_text",
+        "consistency_raw",
+        "section_norm_avg",
+        "hybrid_score",
     ])
     for sample in ds:
         if not sample.image_paths:
@@ -268,64 +267,40 @@ def main() -> None:
 
             # NLI stage timing/energy
             with stage_meter("nli", sink, sid, device=device_nli, power=ps_nli, is_warmup=warmup):
-                if getattr(cfg, "nli_selection", "consistency") == "consistency":
-                    clusters, stats = cluster_sections_consistency(
-                        candidate_sections,
-                        model=nli_model,
-                        tokenizer=nli_tokenizer,
-                        max_length=cfg.nli_max_length,
-                        device=device_nli,
-                        alpha=getattr(cfg, "nli_alpha", 1.0),
-                        beta=getattr(cfg, "nli_beta", 1.0),
-                        batch_size=cfg.nli_batch_size,
-                        tau_edge=max(0.0, min(1.0, getattr(cfg, "nli_tau", 0.0))),
-                        hybrid_lambda=getattr(cfg, "nli_hybrid_lambda", 0.5),
-                        edge_rule=getattr(cfg, "nli_edge_rule", "avg"),
-                        dir_margin=getattr(cfg, "nli_dir_margin", 0.0),
-                        target_size=getattr(cfg, "nli_max_cluster", 3),
-                        autocast=getattr(cfg, "nli_autocast", True),
-                        autocast_dtype=getattr(cfg, "nli_autocast_dtype", "fp16"),
-                    )
-                else:
-                    clusters, stats = cluster_sections_clique(
-                        candidate_sections,
-                        model=nli_model,
-                        tokenizer=nli_tokenizer,
-                        max_length=cfg.nli_max_length,
-                        device=device_nli,
-                        max_cluster_size=cfg.nli_max_cluster,
-                        alpha=getattr(cfg, "nli_alpha", 1.0),
-                        beta=getattr(cfg, "nli_beta", 1.0),
-                        lambda_score=cfg.nli_lambda,
-                        e_min=cfg.nli_e_min,
-                        margin=cfg.nli_margin,
-                        tau=cfg.nli_tau,
-                        batch_size=cfg.nli_batch_size,
-                        edge_rule=getattr(cfg, "nli_edge_rule", "avg"),
-                        dir_margin=getattr(cfg, "nli_dir_margin", 0.0),
-                        autocast=getattr(cfg, "nli_autocast", True),
-                        autocast_dtype=getattr(cfg, "nli_autocast_dtype", "fp16"),
-                    )
+                clusters, _ = cluster_sections_consistency(
+                    candidate_sections,
+                    model=nli_model,
+                    tokenizer=nli_tokenizer,
+                    max_length=cfg.nli_max_length,
+                    device=device_nli,
+                    alpha=getattr(cfg, "nli_alpha", 1.0),
+                    beta=getattr(cfg, "nli_beta", 1.0),
+                    batch_size=cfg.nli_batch_size,
+                    tau_edge=max(0.0, min(1.0, getattr(cfg, "nli_tau", 0.0))),
+                    hybrid_lambda=getattr(cfg, "nli_hybrid_lambda", 0.5),
+                    edge_rule=getattr(cfg, "nli_edge_rule", "avg"),
+                    dir_margin=getattr(cfg, "nli_dir_margin", 0.0),
+                    target_size=getattr(cfg, "nli_max_cluster", 3),
+                    autocast=getattr(cfg, "nli_autocast", True),
+                    autocast_dtype=getattr(cfg, "nli_autocast_dtype", "fp16"),
+                )
 
-            # Log NLI clusters for this sample
-            sel_mode = getattr(cfg, "nli_selection", "consistency")
+            # Log final NLI selection for this sample
             for rank, cl in enumerate(clusters, 1):
                 members = cl.get("sections", [])
-                idxs = cl.get("indices", [])
-                titles = [m.get("doc_title", "") for m in members]
-                sids = [m.get("section_id") for m in members]
-                w_clus.writerow([
-                    sid,
-                    rank,
-                    sel_mode,
-                    cl.get("hybrid_score", cl.get("avg_score", 0.0)),
-                    cl.get("consistency_norm", None),
-                    cl.get("section_norm_avg", None),
-                    len(members),
-                    "|".join(str(x) for x in idxs),
-                    "|".join(titles),
-                    "|".join("" if v is None else str(v) for v in sids),
-                ])
+                cluster_size = len(members)
+                for member in members:
+                    w_nli.writerow([
+                        sid,
+                        rank,
+                        cluster_size,
+                        member.get("doc_title", ""),
+                        member.get("section_id"),
+                        member.get("section_text", ""),
+                        cl.get("consistency_raw", None),
+                        cl.get("section_norm_avg", None),
+                        cl.get("hybrid_score", cl.get("avg_score", None)),
+                    ])
 
             top_cluster = clusters[0]["sections"] if clusters else []
 
@@ -401,7 +376,7 @@ def main() -> None:
 
     # Close per-sample CSVs
     try:
-        f_docs.close(); f_secs.close(); f_clus.close()
+        f_docs.close(); f_secs.close(); f_nli.close()
     except Exception:
         pass
 
@@ -410,7 +385,7 @@ def main() -> None:
     print("Saved summary to:", summary_json)
     print("Saved candidate docs to:", docs_csv)
     print("Saved candidate sections to:", secs_csv)
-    print("Saved candidate clusters to:", clus_csv)
+    print("Saved candidate NLI sections to:", nli_csv)
     for st, s in summary["stages"].items():
         l = s["latency"]
         print(f"{st}: mean={l['mean']:.3f}s p50={l['p50']:.3f}s p90={l['p90']:.3f}s p99={l['p99']:.3f}s | energy_mean={s['energy_J']['mean']:.1f}J | vram_max={s['peak_vram_gb']['max']:.2f}GB")

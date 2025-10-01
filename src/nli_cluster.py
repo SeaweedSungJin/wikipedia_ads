@@ -1,23 +1,14 @@
 from __future__ import annotations
 
-"""NLI-based clustering of BGE reranked sections.
+"""NLI-based clustering of reranked sections using consistency pruning."""
 
-The current approach constructs a weighted graph using entailment/contradiction
-probabilities and ranks maximal cliques.
-"""
-
-from itertools import combinations
 from typing import List, Tuple, Set
 
 import torch
-from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 __all__ = [
-    "load_nli_model",
     "nli_relation",
     "build_relation_graph",
-    "maximal_cliques",
-    "cluster_sections_clique",
     "cluster_sections_consistency",
 ]
 
@@ -55,7 +46,7 @@ def _effective_max_length(tokenizer, model, requested: int) -> int:
 
 
 # ---------------------------------------------------------------------------
-# Graph-based maximal clique clustering
+# Pairwise relation graph helpers
 # ---------------------------------------------------------------------------
 
 
@@ -91,28 +82,6 @@ def nli_relation(
     label_id = int(torch.argmax(probs).item())
     labels = ["contradiction", "neutral", "entailment"]
     return labels[label_id], float(probs[label_id])
-
-
-def _nli_probs(
-    model,
-    tokenizer,
-    premise: str,
-    hypothesis: str,
-    device: torch.device | str,
-    max_length: int,
-) -> torch.Tensor:
-    """Return NLI probabilities (contradiction, neutral, entailment)."""
-
-    eff_max_len = _effective_max_length(tokenizer, model, max_length)
-    inputs = tokenizer(
-        premise,
-        hypothesis,
-        return_tensors="pt",
-        truncation=True,
-        max_length=eff_max_len,
-    ).to(device)
-    with torch.no_grad():
-        return model(**inputs).logits.softmax(dim=1)[0]
 
 
 @torch.no_grad()
@@ -228,137 +197,6 @@ def build_relation_graph(
             weights[i][j] = weights[j][i] = weight
 
     return adj, weights, stats
-
-
-def _bron_kerbosch(R: Set[int], P: Set[int], X: Set[int], adj: List[Set[int]], cliques: List[List[int]]):
-    """Bron–Kerbosch recursive search for maximal cliques."""
-    if not P and not X:
-        cliques.append(sorted(R))
-        return
-    for v in list(P):
-        _bron_kerbosch(
-            R | {v},
-            P & adj[v],
-            X & adj[v],
-            adj,
-            cliques,
-        )
-        P.remove(v)
-        X.add(v)
-
-
-def maximal_cliques(adj: List[Set[int]]) -> List[List[int]]:
-    """Enumerate all maximal cliques in the given graph."""
-    P = set(range(len(adj)))
-    cliques: List[List[int]] = []
-    _bron_kerbosch(set(), P, set(), adj, cliques)
-    return cliques
-
-
-def cluster_sections_clique(
-    sections: List[dict],
-    *,
-    model,
-    tokenizer,
-    max_length: int = 512,
-    device: torch.device | str = "cpu",
-    max_cluster_size: int = 3,
-    alpha: float = 1.0,
-    beta: float = 1.0,
-    clamp_weights: bool = True,
-    lambda_score: float = 0.7,
-    e_min: float = 0.5,
-    margin: float = 0.15,
-    tau: float = 0.25,
-    batch_size: int = 32,
-    edge_rule: str = "avg",
-    dir_margin: float = 0.0,
-    autocast: bool = True,
-    autocast_dtype: str = "fp16",
-) -> Tuple[List[dict], dict]:
-    """Cluster sections by finding maximal cliques with weighted edges.
-
-    Edges are gated by ``e_min``, ``margin`` and ``tau`` before being added to the
-    graph.  The final cluster score blends the average normalised BGE similarity
-    with the mean edge weight using ``lambda_score``.  Returns ``(clusters, stats)``
-    where ``clusters`` is sorted by the final score and ``stats`` contains
-    pairwise relation counts from the underlying graph construction.
-    """
-
-    if not sections:
-        return [], {"entailment": 0, "neutral": 0, "contradiction": 0}
-
-    adj, weights, stats = build_relation_graph(
-        sections,
-        model=model,
-        tokenizer=tokenizer,
-        max_length=max_length,
-        device=device,
-        alpha=alpha,
-        beta=beta,
-        clamp_weights=clamp_weights,
-        e_min=e_min,
-        margin=margin,
-        tau=tau,
-        batch_size=batch_size,
-        edge_rule=edge_rule,
-        dir_margin=dir_margin,
-        autocast=autocast,
-        autocast_dtype=autocast_dtype,
-    )
-
-    # normalize BGE similarities to [0,1] so they can be blended with edge weights
-    raw_scores = [s.get("similarity", 0.0) for s in sections]
-    min_score = min(raw_scores)
-    max_score = max(raw_scores)
-    if max_score > min_score:
-        norm_scores = [(s - min_score) / (max_score - min_score) for s in raw_scores]
-    else:
-        norm_scores = [0.0 for _ in raw_scores]
-
-    cliques = maximal_cliques(adj)
-    raw_cliques = [sorted(list(cl)) for cl in cliques]
-    clusters: List[dict] = []
-    for cl in cliques:
-        best_nodes = list(cl)
-        best_edge = 0.0
-        best_bge = float("-inf")
-        if max_cluster_size and len(cl) > max_cluster_size:
-            for combo in combinations(cl, max_cluster_size):
-                edge_sum = 0.0
-                for a, b in combinations(combo, 2):
-                    edge_sum += weights[a][b]
-                avg_bge = sum(norm_scores[i] for i in combo) / max_cluster_size
-                if (
-                    edge_sum > best_edge
-                    or (edge_sum == best_edge and avg_bge > best_bge)
-                    or (
-                        edge_sum == best_edge
-                        and avg_bge == best_bge
-                        and list(combo) < best_nodes
-                    )
-                ):
-                    best_nodes = list(combo)
-                    best_edge = edge_sum
-                    best_bge = avg_bge
-        else:
-            best_nodes = list(cl)
-            for a, b in combinations(best_nodes, 2):
-                best_edge += weights[a][b]
-            best_bge = sum(norm_scores[i] for i in best_nodes) / len(best_nodes)
-
-        members = [sections[i] for i in best_nodes]
-        num_edges = len(best_nodes) * (len(best_nodes) - 1) / 2
-        edge_avg = best_edge / num_edges if num_edges else 0.0
-        final_score = lambda_score * best_bge + (1 - lambda_score) * edge_avg
-        members.sort(key=lambda s: s.get("similarity", 0.0), reverse=True)
-        clusters.append(
-            {"avg_score": final_score, "sections": members, "indices": best_nodes}
-        )
-
-    stats["raw_cliques"] = raw_cliques
-    clusters.sort(key=lambda c: c["avg_score"], reverse=True)
-    return clusters, stats
 
 
 # ---------------------------------------------------------------------------
@@ -486,7 +324,7 @@ def cluster_sections_consistency(
     alpha: float = 1.0,
     beta: float = 1.0,
     batch_size: int = 32,
-    # adjacency threshold (C_ij > tau_edge forms an edge for component split)
+    # adjacency threshold (C_ij ≥ tau_edge forms an edge for component split)
     tau_edge: float = 1e-8,
     hybrid_lambda: float = 0.5,
     target_size: int = 3,
@@ -499,9 +337,11 @@ def cluster_sections_consistency(
 
     Steps:
     - Compute symmetric NLI probabilities for all pairs and derive C_ij = max(0, alpha*Pe - beta*Pc)
-    - Build an adjacency with edges for C_ij > tau_edge, find connected components
-    - For each component, greedily remove sentences that increase global consistency until no gain
-    - Return all pruned components as clusters, sorted by global consistency score (descending)
+    - Build an adjacency with edges for C_ij ≥ tau_edge and find connected components
+    - Select the connected component with the largest node count (ties broken by raw consistency)
+    - Greedily prune that component until removing any node no longer improves global consistency,
+      then trim down to ``target_size`` if needed
+    - Return a single cluster describing the kept component members
     """
     if not sections:
         return [], {"entailment": 0, "neutral": 0, "contradiction": 0}
@@ -532,61 +372,21 @@ def cluster_sections_consistency(
     comps = _connected_components(adj)
     if not comps:
         comps = [[i] for i in range(len(sections))]
-    comps.sort(key=len, reverse=True)
 
-    raw_clusters: List[dict] = []
-    for comp in comps:
-        # Greedy prune main component
-        kept_idx, cons_score, removed_idx = _greedy_prune(comp, weights, target_size)
-        if kept_idx:
-            members = [sections[i] for i in kept_idx]
-            members.sort(key=lambda s: s.get("similarity", 0.0), reverse=True)
-            raw_clusters.append({
-                "type": "kept",
-                "indices": kept_idx,
-                "sections": members,
-                "consistency_raw": float(cons_score),
-            })
+    def _component_key(indices: List[int]) -> Tuple[int, float]:
+        return (len(indices), _global_consistency(indices, weights))
 
-        # Build subgraphs among removed nodes (if any)
-        if removed_idx:
-            removed_set = set(removed_idx)
-            # Build adjacency restricted to removed nodes
-            sub_adj = [set() for _ in removed_idx]
-            idx_map = {node: k for k, node in enumerate(removed_idx)}
-            for a_i in removed_idx:
-                ai_m = idx_map[a_i]
-                for b_j in adj[a_i]:
-                    if b_j in removed_set:
-                        sub_adj[ai_m].add(idx_map[b_j])
-            # Connected components within removed nodes (preserve singletons too)
-            comps_rm = _connected_components(sub_adj)
-            for comp_local in comps_rm:
-                orig_nodes = [removed_idx[k] for k in comp_local]
-                if len(orig_nodes) > target_size:
-                    trimmed, g, _ = _greedy_prune(orig_nodes, weights, target_size)
-                else:
-                    trimmed = sorted(orig_nodes)
-                    g = _global_consistency(trimmed, weights)
-                if len(trimmed) < target_size:
-                    continue
-                members = [sections[i] for i in trimmed]
-                members.sort(key=lambda s: s.get("similarity", 0.0), reverse=True)
-                raw_clusters.append({
-                    "type": "removed",
-                    "indices": trimmed,
-                    "sections": members,
-                    "consistency_raw": float(g),
-                })
+    selected = max(comps, key=_component_key)
+    kept_idx, cons_score, _ = _greedy_prune(selected, weights, target_size)
 
-    # Normalise consistency over all clusters (min-max)
-    cons_vals = [c.get("consistency_raw", 0.0) for c in raw_clusters]
-    if cons_vals:
-        cmin, cmax = min(cons_vals), max(cons_vals)
-    else:
-        cmin = cmax = 0.0
+    if not kept_idx:
+        kept_idx = sorted(selected[:target_size])
+        cons_score = _global_consistency(kept_idx, weights)
 
-    # Prepare per-section strength normalisation (prefer combined_score -> rerank_norm -> similarity)
+    members = [sections[i] for i in kept_idx]
+    members.sort(key=lambda s: s.get("similarity", 0.0), reverse=True)
+
+    # Compute section strength normalisation (prefer combined_score -> rerank_norm -> similarity)
     sec_raw = [
         float(s.get("combined_score", s.get("rerank_norm", s.get("similarity", 0.0))))
         for s in sections
@@ -596,23 +396,25 @@ def cluster_sections_consistency(
     else:
         smin = smax = 0.0
 
-    for c in raw_clusters:
-        raw = float(c.get("consistency_raw", 0.0))
-        cons_norm = 0.0 if cmax <= cmin else (raw - cmin) / (cmax - cmin)
-        c["consistency_norm"] = float(cons_norm)
-        # Mean section strength within the cluster (min-max over this sample)
-        idxs = c.get("indices", [])
-        if idxs:
-            vals = [sec_raw[i] for i in idxs]
-            sec_norm = 0.0 if smax <= smin else sum((v - smin) / (smax - smin) for v in vals) / len(vals)
-        else:
-            sec_norm = 0.0
-        c["section_norm_avg"] = float(sec_norm)
-        # Blend consistency and section strength
-        lam = max(0.0, min(1.0, float(hybrid_lambda)))
-        hybrid = lam * cons_norm + (1.0 - lam) * sec_norm
-        c["hybrid_score"] = float(hybrid)
-        c["avg_score"] = float(hybrid)
+    if kept_idx:
+        vals = [sec_raw[i] for i in kept_idx]
+        sec_norm = 0.0 if smax <= smin else sum((v - smin) / (smax - smin) for v in vals) / len(vals)
+    else:
+        sec_norm = 0.0
 
-    raw_clusters.sort(key=lambda c: c.get("avg_score", 0.0), reverse=True)
-    return raw_clusters, stats
+    lam = max(0.0, min(1.0, float(hybrid_lambda)))
+    cons_norm = 1.0 if kept_idx else 0.0
+    hybrid = lam * cons_norm + (1.0 - lam) * sec_norm
+
+    cluster = {
+        "type": "selected",
+        "indices": kept_idx,
+        "sections": members,
+        "consistency_raw": float(cons_score),
+        "consistency_norm": float(cons_norm),
+        "section_norm_avg": float(sec_norm),
+        "hybrid_score": float(hybrid),
+        "avg_score": float(hybrid),
+    }
+
+    return [cluster], stats

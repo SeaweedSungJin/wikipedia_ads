@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import time
-import torch
 from src.config import Config
 from src.dataloader import VQADataset
 from src.pipeline import search_rag_pipeline
-from src.nli_cluster import cluster_sections_clique, cluster_sections_consistency
+from src.nli_cluster import cluster_sections_consistency
 from src.models import load_vlm_model, generate_vlm_answer, load_nli_model, resolve_device
 from src.eval import evaluate_example
 from src.evaluation_utils import (
@@ -41,9 +40,7 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
         model_name = cfg.deberta_nli_model
     model, tokenizer = load_nli_model(model_name, device)
     vlm_model, vlm_processor = load_vlm_model(device_map=cfg.vlm_device)
-    print(
-        "NLI clustering mode: clique-weighted (ent-contr) using e_min/margin/tau"
-    )
+    print("NLI clustering mode: consistency (largest component pruning)")
     print("이미지 검색 모드: 문서의 모든 이미지 사용")
 
     use_qformer = cfg.rerankers.get("q-former", False) or cfg.rerankers.get("qformer", False)
@@ -120,44 +117,23 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
             )
 
             nli_start = time.time()
-            if getattr(cfg, "nli_selection", "consistency") == "consistency":
-                clusters, _ = cluster_sections_consistency(
-                    candidate_sections,
-                    model=model,
-                    tokenizer=tokenizer,
-                    max_length=cfg.nli_max_length,
-                    device=device,
-                    alpha=getattr(cfg, "nli_alpha", 1.0),
-                    beta=getattr(cfg, "nli_beta", 1.0),
-                    batch_size=cfg.nli_batch_size,
-                    tau_edge=max(0.0, min(1.0, getattr(cfg, "nli_tau", 0.0))),
-                    hybrid_lambda=getattr(cfg, "nli_hybrid_lambda", 0.5),
-                    edge_rule=getattr(cfg, "nli_edge_rule", "avg"),
-                    dir_margin=getattr(cfg, "nli_dir_margin", 0.0),
-                    target_size=getattr(cfg, "nli_max_cluster", 3),
-                    autocast=getattr(cfg, "nli_autocast", True),
-                    autocast_dtype=getattr(cfg, "nli_autocast_dtype", "fp16"),
-                )
-            else:
-                clusters, _ = cluster_sections_clique(
-                    candidate_sections,
-                    model=model,
-                    tokenizer=tokenizer,
-                    max_length=cfg.nli_max_length,
-                    device=device,
-                    max_cluster_size=cfg.nli_max_cluster,
-                    alpha=getattr(cfg, "nli_alpha", 1.0),
-                    beta=getattr(cfg, "nli_beta", 1.0),
-                    lambda_score=cfg.nli_lambda,
-                    e_min=cfg.nli_e_min,
-                    margin=cfg.nli_margin,
-                    tau=cfg.nli_tau,
-                    batch_size=cfg.nli_batch_size,
-                    edge_rule=getattr(cfg, "nli_edge_rule", "avg"),
-                    dir_margin=getattr(cfg, "nli_dir_margin", 0.0),
-                    autocast=getattr(cfg, "nli_autocast", True),
-                    autocast_dtype=getattr(cfg, "nli_autocast_dtype", "fp16"),
-                )
+            clusters, _ = cluster_sections_consistency(
+                candidate_sections,
+                model=model,
+                tokenizer=tokenizer,
+                max_length=cfg.nli_max_length,
+                device=device,
+                alpha=getattr(cfg, "nli_alpha", 1.0),
+                beta=getattr(cfg, "nli_beta", 1.0),
+                batch_size=cfg.nli_batch_size,
+                tau_edge=max(0.0, min(1.0, getattr(cfg, "nli_tau", 0.0))),
+                hybrid_lambda=getattr(cfg, "nli_hybrid_lambda", 0.5),
+                edge_rule=getattr(cfg, "nli_edge_rule", "avg"),
+                dir_margin=getattr(cfg, "nli_dir_margin", 0.0),
+                target_size=getattr(cfg, "nli_max_cluster", 3),
+                autocast=getattr(cfg, "nli_autocast", True),
+                autocast_dtype=getattr(cfg, "nli_autocast_dtype", "fp16"),
+            )
             nli_elapsed = time.time() - nli_start
             total_nli_elapsed += nli_elapsed
             top_cluster = clusters[0]["sections"] if clusters else []

@@ -50,15 +50,10 @@ class Config:
     nli_models: dict = field(default_factory=dict)  # Which NLI model to use
     nli_max_length: int = 512  # Max tokens per NLI input pair
     nli_max_cluster: int = 3  # Max sections per NLI cluster
-    nli_e_min: float = 0.5  # Entailment minimum for graph edges
-    nli_margin: float = 0.15  # Entailment-contradiction margin for edges
     nli_tau: float = 0.25  # Weight cutoff for retaining edges
-    nli_lambda: float = 0.7  # Blend weight between BGE and edge coherence
     # Pairwise consistency weighting (C_ij = max(0, alpha*Pe - beta*Pc))
     nli_alpha: float = 1.0
     nli_beta: float = 1.0
-    # NLI selection mode: 'clique' (existing) or 'consistency' (greedy pruning)
-    nli_selection: str = "consistency"
     # Hybrid cluster scoring in consistency mode:
     # final = nli_hybrid_lambda * consistency_norm + (1 - nli_hybrid_lambda) * section_score_norm
     nli_hybrid_lambda: float = 0.5

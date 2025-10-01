@@ -8,7 +8,7 @@ Encyclopedic-VQA 질문을 Wikipedia 기반 지식과 결합해 푸는 RAG(Retri
 3. **(옵션) Contriever 융합** – 텍스트 질문/이미지 설명 임베딩을 융합해 섹션과 코사인 유사도를 구합니다 (`alpha` 가중치).
 4. **재순위 및 점수 결합** – `src/rerankers` 를 통해 BGE, Electra, Jina v1(tiny/turbo), MPNet을 선택적으로 적용하고, 이미지 softmax 점수와 시그모이드된 재순위 점수를 가중합(`rank_img_weight`, `rank_rerank_weight`).
 5. **엔트로피 기반 섹션 필터링** – 상위 `m_value` 섹션의 softmax 분포 엔트로피로 신뢰도를 계산해 최종 전달 섹션 개수를 동적으로 결정(`bge_conf_threshold`).
-6. **NLI 그래프 클러스터링** – `src/nli_cluster` 가 entailment/contradiction 확률로 가중 그래프를 만든 뒤 `consistency` 또는 `clique` 모드로 최대 `nli_max_cluster` 개 섹션을 묶습니다. α·β, edge rule, 양방향 margin 등은 `config.yaml` 로 제어합니다.
+6. **NLI 그래프 클러스터링** – `src/nli_cluster` 가 entailment/contradiction 확률로 가중 그래프를 만들고, 가장 큰 연결요소를 골라 일관성 점수가 더 높아지는 방향으로 섹션을 제거해 `nli_max_cluster` 크기에 맞춥니다(필요 시 trim). α·β, edge rule, 양방향 margin 등은 `config.yaml` 로 제어합니다.
 7. **VLM 추론 및 평가** – 선택된 섹션과 이미지를 LLaVA에 결합해 답을 생성(`src.models.generate_vlm_answer`), `src.eval.evaluate_example` 로 Exact Match → BEM 순서로 채점합니다.
 
 모든 대형 모델과 인덱스는 모듈 전역 캐시에 저장돼 반복 호출 시 재사용됩니다. CUDA 미사용 환경에서는 자동으로 CPU 폴백이 적용됩니다.
@@ -25,7 +25,7 @@ Encyclopedic-VQA 질문을 Wikipedia 기반 지식과 결합해 푸는 RAG(Retri
 - **재순위 설정**: `rerankers` 플래그(`contriever`, `jina_tiny`, `jina_turbo`, `bge`, `electra`, `mpnet`), `bge_model`, `bge_batch_size`, `electra_model`, `electra_batch_size`, `mpnet_model`
 - **점수 결합/필터링**: `rank_img_ratio`, `bge_conf_threshold`
 - **이미지 검색 캐시**: `clip_cache_dir`(설정 시 캐시 활성), `clip_cache_kmax`(저장할 최대 문서 수)
-- **NLI**: `nli_models` 토글(deberta/roberta/deberta_v3), `nli_max_length`, `nli_batch_size`, `nli_e_min`, `nli_margin`, `nli_tau`, `nli_lambda`, `nli_selection`, `nli_hybrid_lambda`, `nli_edge_rule`, `nli_dir_margin`, `nli_autocast`, `nli_autocast_dtype`
+- **NLI**: `nli_models` 토글(deberta/roberta/deberta_v3), `nli_max_length`, `nli_batch_size`, `nli_tau`, `nli_alpha`, `nli_beta`, `nli_hybrid_lambda`, `nli_edge_rule`, `nli_dir_margin`, `nli_autocast`, `nli_autocast_dtype`
 - **디바이스**: `image_device`, `bge_device`, `nli_device`, `vlm_device` (정수 또는 `cuda:0` 형태). CUDA 사용 불가 시 자동으로 CPU로 대체합니다.
 
 `Config.from_yaml` 은 예상치 못한 키를 무시하며, 이전 버전 필드(`googlelandmark_root`, `id2name_json`)도 역호환 처리합니다.
@@ -40,7 +40,7 @@ Encyclopedic-VQA 질문을 Wikipedia 기반 지식과 결합해 푸는 RAG(Retri
 - **`evaluation_utils.py`** – Ground truth 추출과 Recall@K 집계를 위한 공용 헬퍼. 실행 스크립트(`bge_nli_graph_dataset.py`, `metric_dataset.py`, `qformer_reranker_pipeline.py`)에서 공유합니다.
 - **`segmenter.py`** – 섹션/문장/단락 분리 로직과 불필요한 섹션(References 등) 필터링.
 - **`models.py`** – 이미지·텍스트·재순위·VLM·NLI 모델 로더, 장치 헬퍼(`resolve_device`, `setup_cuda`, `get_device`) 및 Jina 임베딩 유틸.
-- **`nli_cluster.py`** – entailment/contradiction 확률로 그래프를 구축하고 `cluster_sections_consistency` 또는 `cluster_sections_clique` 로 상위 클러스터를 선택합니다. 토크나이저/모델 길이 제한을 자동으로 적용합니다.
+- **`nli_cluster.py`** – entailment/contradiction 확률로 그래프를 구축하고 가장 큰 연결요소를 일관성 기반으로 정제해 최종 섹션을 선택합니다. 토크나이저/모델 길이 제한을 자동으로 적용합니다.
 - **`utils.py`** – KB JSON/FAISS 로드(dict 재매핑, 길이 검증 포함), 이미지 로딩·프리페치, 타이틀/URL 정규화, NLTK 데이터 다운로드.
 - **`eval.py`** – 답변 전처리, Exact Match, TensorFlow Hub 기반 BEM 평가 로직.
 - **`metrics_utils.py`** – NVML 전력 샘플러, stage meter 컨텍스트, metrics CSV/요약 생성을 담당합니다.
@@ -58,7 +58,7 @@ Encyclopedic-VQA 질문을 Wikipedia 기반 지식과 결합해 푸는 RAG(Retri
 실행 시 기본적으로 `metrics/metrics_run_YYYYMMDD_HHMM/` 폴더에 다음 파일을 생성합니다.
 - `metrics_samples.csv` – 샘플·스테이지별 latency/VRAM/에너지 (warmup 여부 포함)
 - `metrics_summary.json` – 선택한 퍼센타일(`--pctl`)을 포함한 통계와 환경 정보(`env_info`)
-- `candidate_docs.csv`, `candidate_sections.csv`, `candidate_clusters.csv` – 각 단계 후보에 대한 점수/클러스터 구성 기록
+- `candidate_docs.csv`, `candidate_sections.csv`, `candidate_nli.csv` – 각 단계 후보와 최종 NLI 선택 섹션 기록
 
 NVML이 없거나 접근이 막힌 경우 전력/에너지 값은 0으로 채워집니다.
 
