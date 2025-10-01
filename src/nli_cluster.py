@@ -314,6 +314,54 @@ def _greedy_prune(
     return final_set, final_score, removed
 
 
+def _recompute_prune(
+    indices: List[int],
+    weights: List[List[float]],
+    target_size: int,
+    epsilon: float = 1e-6,
+) -> Tuple[List[int], float]:
+    """Prune nodes by explicitly recomputing global consistency deltas each step.
+
+    This mirrors the Shapley-inspired pseudo-code: at every iteration compute
+    the marginal gain for removing each node, remove the node with the largest
+    positive gain (above ``epsilon``), and stop once no removal improves the
+    global score.  The cluster may therefore remain larger than
+    ``target_size`` when further removals would hurt consistency.
+    """
+
+    cur = list(indices)
+    if len(cur) <= target_size:
+        kept = sorted(cur)
+        return kept, _global_consistency(kept, weights)
+
+    global_score = _global_consistency(cur, weights)
+    best_delta_tol = max(epsilon, 0.0)
+
+    while len(cur) > target_size:
+        best_delta = best_delta_tol
+        best_u = None
+        best_score = global_score
+        for u in cur:
+            without_u = [i for i in cur if i != u]
+            if not without_u:
+                continue
+            next_score = _global_consistency(without_u, weights)
+            delta = next_score - global_score
+            if delta > best_delta + 1e-12 or (
+                abs(delta - best_delta) <= 1e-12 and best_u is not None and u < best_u
+            ):
+                best_delta = delta
+                best_u = u
+                best_score = next_score
+        if best_u is None:
+            break
+        cur.remove(best_u)
+        global_score = best_score
+
+    kept = sorted(cur)
+    return kept, global_score
+
+
 def cluster_sections_consistency(
     sections: List[dict],
     *,
@@ -332,6 +380,8 @@ def cluster_sections_consistency(
     autocast_dtype: str = "fp16",
     edge_rule: str = "avg",
     dir_margin: float = 0.0,
+    reduction_mode: str = "greedy",
+    reduction_epsilon: float = 1e-6,
 ) -> Tuple[List[dict], dict]:
     """Select section clusters by maximizing global consistency via greedy pruning.
 
@@ -377,10 +427,24 @@ def cluster_sections_consistency(
         return (len(indices), _global_consistency(indices, weights))
 
     selected = max(comps, key=_component_key)
-    kept_idx, cons_score, _ = _greedy_prune(selected, weights, target_size)
+    mode = (reduction_mode or "greedy").lower()
+    if mode == "recompute":
+        kept_idx, cons_score = _recompute_prune(
+            selected,
+            weights,
+            target_size,
+            epsilon=max(0.0, float(reduction_epsilon)),
+        )
+    else:
+        kept_idx, cons_score, _ = _greedy_prune(
+            selected,
+            weights,
+            target_size,
+        )
 
     if not kept_idx:
-        kept_idx = sorted(selected[:target_size])
+        fallback = selected[:target_size] if target_size else selected
+        kept_idx = sorted(fallback)
         cons_score = _global_consistency(kept_idx, weights)
 
     members = [sections[i] for i in kept_idx]

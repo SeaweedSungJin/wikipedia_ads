@@ -133,6 +133,8 @@ def run_bge_nli_graph_dataset(cfg: Config) -> None:
                 target_size=getattr(cfg, "nli_max_cluster", 3),
                 autocast=getattr(cfg, "nli_autocast", True),
                 autocast_dtype=getattr(cfg, "nli_autocast_dtype", "fp16"),
+                reduction_mode=getattr(cfg, "nli_reduction_mode", "greedy"),
+                reduction_epsilon=getattr(cfg, "nli_reduction_epsilon", 1e-6),
             )
             nli_elapsed = time.time() - nli_start
             total_nli_elapsed += nli_elapsed

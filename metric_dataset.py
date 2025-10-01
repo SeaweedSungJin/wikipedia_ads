@@ -283,6 +283,8 @@ def main() -> None:
                     target_size=getattr(cfg, "nli_max_cluster", 3),
                     autocast=getattr(cfg, "nli_autocast", True),
                     autocast_dtype=getattr(cfg, "nli_autocast_dtype", "fp16"),
+                    reduction_mode=getattr(cfg, "nli_reduction_mode", "greedy"),
+                    reduction_epsilon=getattr(cfg, "nli_reduction_epsilon", 1e-6),
                 )
 
             # Log final NLI selection for this sample

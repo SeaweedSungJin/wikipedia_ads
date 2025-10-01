@@ -60,6 +60,8 @@ nli_beta: 1.0
 # Hybrid cluster scoring (consistency mode):
 # final_cluster_score = nli_hybrid_lambda * normalized_global_consistency + (1 - nli_hybrid_lambda) * mean(normalized_section_scores)
 nli_hybrid_lambda: 1 #1이면 일관성만으로 
+nli_reduction_mode: recompute # greedy (fast)기존 or recompute (Shapley-style)새거
+nli_reduction_epsilon: 1e-6
 
 #양방향 실험용
 nli_edge_rule: avg #both_dir or avg

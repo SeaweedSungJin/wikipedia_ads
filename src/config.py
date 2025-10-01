@@ -61,6 +61,9 @@ class Config:
     nli_edge_rule: str = "avg"
     # Minimum (entailment - contradiction) required in each direction when using 'both_dir'
     nli_dir_margin: float = 0.0
+    # Graph reduction mode for consistency clustering: 'greedy' or 'recompute'
+    nli_reduction_mode: str = "greedy"
+    nli_reduction_epsilon: float = 1e-6
     # NLI performance knobs (autocast only; bidirectional/topk removed for stability)
     nli_autocast: bool = True  # Use torch.autocast for faster NLI matmuls
     nli_autocast_dtype: str = "fp16"  # 'fp16' or 'bf16'
