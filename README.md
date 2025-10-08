@@ -5,11 +5,9 @@ Encyclopedic-VQA 질문을 Wikipedia 기반 지식과 결합해 푸는 RAG(Retri
 ## Pipeline At A Glance
 1. **이미지 검색** – EVA-CLIP 임베딩으로 질의 이미지를 인코딩하고, 사전 구축된 FAISS 인덱스(`src/utils.load_faiss_and_ids`)에서 top-K 문서를 찾습니다. `list of`/`outline of`/`index of` 등 목록형 문서는 자동으로 제외됩니다.
 2. **후보 섹션 생성** – `src/segmenter` 가 문서를 섹션·단락·문장 단위로 분할합니다. iNaturalist 경로 캐시는 `VQADataset` 초기화 시 `cache/` 디렉터리에 생성됩니다.
-3. **(옵션) Contriever 융합** – 텍스트 질문/이미지 설명 임베딩을 융합해 섹션과 코사인 유사도를 구합니다 (`alpha` 가중치).
-4. **재순위 및 점수 결합** – `src/rerankers` 를 통해 BGE, Electra, Jina v1(tiny/turbo), MPNet을 선택적으로 적용하고, 이미지 softmax 점수와 시그모이드된 재순위 점수를 가중합(`rank_img_weight`, `rank_rerank_weight`).
-5. **엔트로피 기반 섹션 필터링** – 상위 `m_value` 섹션의 softmax 분포 엔트로피로 신뢰도를 계산해 최종 전달 섹션 개수를 동적으로 결정(`bge_conf_threshold`).
-6. **NLI 그래프 클러스터링** – `src/nli_cluster` 가 entailment/contradiction 확률로 가중 그래프를 만들고, 가장 큰 연결요소를 골라 일관성 점수가 더 높아지는 방향으로 섹션을 제거해 `nli_max_cluster` 크기에 맞춥니다(필요 시 trim). α·β, edge rule, 양방향 margin 등은 `config.yaml` 로 제어합니다.
-7. **VLM 추론 및 평가** – 선택된 섹션과 이미지를 LLaVA에 결합해 답을 생성(`src.models.generate_vlm_answer`), `src.eval.evaluate_example` 로 Exact Match → BEM 순서로 채점합니다.
+3. **재순위 및 점수 결합** – `src/rerankers` 를 통해 BGE, Electra, Jina v1(tiny/turbo), MPNet을 선택적으로 적용하고, 이미지 softmax 점수와 시그모이드된 재순위 점수를 가중합(`rank_img_weight`, `rank_rerank_weight`).
+4. **NLI 그래프 클러스터링** – `src/nli_cluster` 가 entailment/contradiction 확률로 가중 그래프를 만들고, 가장 큰 연결요소를 골라 일관성 점수가 더 높아지는 방향으로 섹션을 제거해 `nli_max_cluster` 크기에 맞춥니다(필요 시 trim). α·β, edge rule, 양방향 margin 등은 `config.yaml` 로 제어합니다.
+5. **VLM 추론 및 평가** – 선택된 섹션과 이미지를 LLaVA에 결합해 답을 생성(`src.models.generate_vlm_answer`), `src.eval.evaluate_example` 로 Exact Match → BEM 순서로 채점합니다.
 
 모든 대형 모델과 인덱스는 모듈 전역 캐시에 저장돼 반복 호출 시 재사용됩니다. CUDA 미사용 환경에서는 자동으로 CPU 폴백이 적용됩니다.
 
@@ -24,7 +22,7 @@ Encyclopedic-VQA 질문을 Wikipedia 기반 지식과 결합해 푸는 RAG(Retri
 - **세그먼트 옵션**: `segment_level` (section/paragraph/sentence), `chunk_size`
 - **재순위 설정**: `rerankers` 플래그(`contriever`, `jina_tiny`, `jina_turbo`, `bge`, `electra`, `mpnet`), `bge_model`, `bge_batch_size`, `electra_model`, `electra_batch_size`, `mpnet_model`
 - **점수 결합/필터링**: `rank_img_ratio`, `bge_conf_threshold`
-- **이미지 검색 캐시**: `clip_cache_dir`(설정 시 캐시 활성), `clip_cache_kmax`(저장할 최대 문서 수)
+- **이미지 검색 캐시**: `clip_cache_dir`(설정 시 캐시 활성), `clip_cache_kmax`(저장할 최대 문서 수), `image_encoder_name`
 - **NLI**: `nli_models` 토글(deberta/roberta/deberta_v3), `nli_max_length`, `nli_batch_size`, `nli_tau`, `nli_alpha`, `nli_beta`, `nli_hybrid_lambda`, `nli_reduction_mode`, `nli_reduction_epsilon`, `nli_edge_rule`, `nli_dir_margin`, `nli_autocast`, `nli_autocast_dtype`
 - **디바이스**: `image_device`, `bge_device`, `nli_device`, `vlm_device` (정수 또는 `cuda:0` 형태). CUDA 사용 불가 시 자동으로 CPU로 대체합니다.
 

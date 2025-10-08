@@ -84,6 +84,7 @@ class Config:
 
     # Device placement
     image_device: int | str = 3  # GPU id for image model
+    image_encoder_name: str = "BAAI/EVA-CLIP-8B"
     bge_device: int | str = 0  # GPU id or name for BGE reranker
     nli_device: int | str = 0  # GPU id or name for NLI model
     vlm_device: int | str = 0  # GPU id or name for VLM model (separate from reranker to avoid OOM)

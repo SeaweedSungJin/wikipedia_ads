@@ -93,8 +93,6 @@ def search_rag_pipeline(
     setup_cuda()
 
     print(f"Using device: {device}")
-    image_model, image_processor = load_image_model(device_map=cfg.image_device)
-
     use_contriever = cfg.rerankers.get("contriever", False)
     use_jina_tiny = cfg.rerankers.get("jina_tiny", False)
     use_jina_turbo = cfg.rerankers.get("jina_turbo", False)
@@ -128,10 +126,10 @@ def search_rag_pipeline(
     kb_list = _KB_LIST
 
     clip_cache_handle = None
+    encoder_name = getattr(cfg, "image_encoder_name", "BAAI/EVA-CLIP-8B")
     clip_cache_target = max(cfg.k_value, int(getattr(cfg, "clip_cache_kmax", cfg.k_value)))
     cache_dir = getattr(cfg, "clip_cache_dir", None)
     if cache_dir:
-        encoder_name = getattr(getattr(image_model, "config", None), "_name_or_path", "image_encoder")
         cache_meta = clip_cache.build_meta(
             dataset_csv=cfg.dataset_csv,
             dataset_start=cfg.dataset_start,
@@ -186,25 +184,6 @@ def search_rag_pipeline(
                     faiss_positions[existing] = int(pos)
         return doc_indices, doc_scores, doc_offsets, faiss_positions
 
-    # Encode the query image and search the FAISS index
-    if stage_meter_factory:
-        img_stage = stage_meter_factory("image_search")
-    else:
-        from contextlib import nullcontext
-        img_stage = nullcontext()
-    with img_stage:
-        img = load_image(cfg.image_path)
-        img_emb = encode_image(img, image_model, image_processor)
-        img_emb_np = img_emb.numpy().astype("float32")
-        # Re-normalise in case of numeric drift after conversion
-        img_emb_np /= np.linalg.norm(img_emb_np, axis=1, keepdims=True)
-
-        # Retrieve more candidates than needed so that filtered pages
-        # (e.g., "list of" or "outline of" entries) can be skipped
-        expand = cfg.search_expand if cfg.search_expand is not None else cfg.k_value * 20
-        search_k = min(expand, faiss_index.ntotal)
-        distances, indices = faiss_index.search(img_emb_np, k=search_k)
-
     doc_indices: List[int] = []
     doc_scores_list: List[float] = []
     doc_offsets: List[int] = []
@@ -223,6 +202,26 @@ def search_rag_pipeline(
             doc_scores_list = cached["doc_scores"][:clip_cache_target]
             doc_offsets = cached["image_offsets"][:clip_cache_target]
             faiss_positions = cached["faiss_positions"][:clip_cache_target]
+
+    # Encode the query image and search the FAISS index
+    if stage_meter_factory:
+        img_stage = stage_meter_factory("image_search")
+    else:
+        from contextlib import nullcontext
+        img_stage = nullcontext()
+    img = None
+    distances = indices = None
+    with img_stage:
+        img = load_image(cfg.image_path)
+        if not doc_indices:
+            image_model, image_processor = load_image_model(device_map=cfg.image_device)
+            img_emb = encode_image(img, image_model, image_processor)
+            img_emb_np = img_emb.numpy().astype("float32")
+            img_emb_np /= np.linalg.norm(img_emb_np, axis=1, keepdims=True)
+
+            expand = cfg.search_expand if cfg.search_expand is not None else cfg.k_value * 20
+            search_k = min(expand, faiss_index.ntotal)
+            distances, indices = faiss_index.search(img_emb_np, k=search_k)
 
     if not doc_indices:
         doc_indices, doc_scores_list, doc_offsets, faiss_positions = _collect_from_faiss(
@@ -244,6 +243,9 @@ def search_rag_pipeline(
     if not doc_indices:
         elapsed = time.time() - start_time
         return [], [], [], elapsed
+
+    if img is None:
+        raise RuntimeError("Failed to load query image for downstream stages")
 
     # Take only the configured top-K for downstream usage
     limit = cfg.k_value

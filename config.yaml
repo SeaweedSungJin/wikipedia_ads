@@ -6,9 +6,10 @@ k_value: 20
 m_value: 10
 alpha: 0.9
 search_expand: 20 # lisf of 같은거 처리용, 이미지 과샘플링
-image_device: 0
+image_device: 1
+image_encoder_name: BAAI/EVA-CLIP-8B
 # Device placement
-bge_device: 1
+bge_device: 2
 nli_device: 2
 nli_batch_size: 512
 # Dedicated device for VLM to avoid sharing memory with reranker
